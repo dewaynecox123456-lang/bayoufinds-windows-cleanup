@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dewaynecox123456-lang/bayoufinds-windows-cleanup/main/Bayoucleanup.png" width="700"/>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dewaynecox123456-lang/bayoufinds-windows-cleanup/main/bayoufinds_cleanup_terminal_mock.png" width="700"/>
+</p>
 # BayouFinds Windows Cleanup Tool
 
 A simple, safe Windows cleanup script that removes junk files and improves performance using only built-in Windows tools.
