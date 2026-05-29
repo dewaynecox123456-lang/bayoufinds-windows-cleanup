@@ -1,0 +1,5 @@
+
+# Local release/package output
+archive/
+release/
+*.bak.*
