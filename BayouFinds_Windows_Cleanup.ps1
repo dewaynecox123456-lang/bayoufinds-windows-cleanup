@@ -16,6 +16,7 @@ $TimeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path -Path $LogDir -ChildPath "cleanup_$TimeStamp.log"
 $InteractiveMode = [Environment]::UserInteractive -and -not $env:CI -and -not $WhatIfPreference
 $StartTime = Get-Date
+$RenewalUrl = "https://bayoufinds.com/b/y3OJr"
 
 New-Item -ItemType Directory -Force -Path $LogDir -WhatIf:$false | Out-Null
 
