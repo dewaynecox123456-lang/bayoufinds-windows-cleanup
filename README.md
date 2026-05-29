@@ -8,6 +8,9 @@
 
 # BayouFinds Windows Cleanup Tool
 
+![BayouOps Brand Banner](screenshots/brand-clean/01-brand-banner.png)
+
+
 > Fast. Safe. No registry hacks. Just clean performance.
 
 ## 💾 Get the Full Ready-to-Run Version
