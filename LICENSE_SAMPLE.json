@@ -1,0 +1,7 @@
+{
+  "product": "BayouFinds Windows Cleanup Tool",
+  "mode": "Free",
+  "expiresAt": null,
+  "customer": "Sample Customer",
+  "notes": "Copy this sample to %USERPROFILE%\\.bayoufinds\\license.json and replace values with a valid BayouFinds license when provided."
+}

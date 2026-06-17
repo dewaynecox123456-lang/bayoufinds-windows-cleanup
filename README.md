@@ -46,6 +46,17 @@ A simple, safe Windows cleanup script that removes junk files and improves perfo
 
 ## 🚀 How to Use
 
+Recommended launcher:
+
+```bat
+START_CLEANUP_GUI.bat
+```
+
+The GUI includes the startup agreement, selected-action workflow, report
+buttons, help windows, and status output.
+
+CLI and BAT menu launchers are still available for direct use.
+
 Run PowerShell as Administrator:
 
 ```powershell
