@@ -810,6 +810,114 @@ function Get-SafeCleanupCategories {
             -RiskLevel "Low"
 
         New-CleanupCategory `
+            -Id "discord_cache" `
+            -Label "Discord cache" `
+            -Description "Discord cache, temporary log, and crash-report files. Skipped while Discord is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "discord\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discord\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discord\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discord\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discord\Crashpad\reports")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("Discord") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
+            -Id "discord_ptb_cache" `
+            -Label "Discord PTB cache" `
+            -Description "Discord PTB cache, temporary log, and crash-report files. Skipped while Discord PTB is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "discordptb\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordptb\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordptb\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordptb\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordptb\Crashpad\reports")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("DiscordPTB") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
+            -Id "discord_canary_cache" `
+            -Label "Discord Canary cache" `
+            -Description "Discord Canary cache, temporary log, and crash-report files. Skipped while Discord Canary is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "discordcanary\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordcanary\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordcanary\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordcanary\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "discordcanary\Crashpad\reports")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("DiscordCanary") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
+            -Id "teams_cache" `
+            -Label "Microsoft Teams cache" `
+            -Description "Microsoft Teams cache, temporary log, and crash-report files. Skipped while Teams is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Teams\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Teams\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Teams\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Teams\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Teams\Crashpad\reports"),
+                (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Cache"),
+                (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Code Cache"),
+                (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\GPUCache"),
+                (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs"),
+                (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Crashpad\reports")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("Teams", "ms-teams", "msteams") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
+            -Id "slack_cache" `
+            -Label "Slack cache" `
+            -Description "Slack cache, temporary log, and crash-report files. Skipped while Slack is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "Slack\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Slack\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Slack\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Slack\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Slack\Crashpad\reports")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("slack") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
+            -Id "zoom_cache" `
+            -Label "Zoom cache" `
+            -Description "Zoom cache, temporary log, and crash-report files. Skipped while Zoom is running." `
+            -Paths @(
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\data\Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\data\Code Cache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\data\GPUCache"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\data\logs"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\data\Crashpad\reports"),
+                (Join-Path -Path $env:APPDATA -ChildPath "Zoom\logs")
+            ) `
+            -DefaultEnabled $true `
+            -RequiresAdmin $false `
+            -RequiresConfirmation $false `
+            -SkipIfProcessRunning @("Zoom") `
+            -RiskLevel "Low"
+
+        New-CleanupCategory `
             -Id "recent_files_cache" `
             -Label "Recent files cache" `
             -Description "Windows recent-file shortcut cache for the current user." `

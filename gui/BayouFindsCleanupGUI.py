@@ -438,7 +438,7 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe cleanup areas and create a report. The scan does not delete files.\n\nAfter the scan, review the results here or open the latest report. Use Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds protects your Documents, Pictures, Desktop, Videos, Music, and Downloads by default.\nRegistry cleaning and driver cleanup are not included.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
+            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nAfter the scan, review the results here or open the latest report. Use Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds protects your Documents, Pictures, Desktop, Videos, Music, and Downloads by default.\nRegistry cleaning and driver cleanup are not included.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
         )
         self.output.configure(state="disabled")
 
@@ -533,7 +533,7 @@ class BayouFindsCleanupGUI:
     def quick_cleanup(self) -> None:
         if not messagebox.askyesno(
             "Run Safe Cleanup",
-            "Run safe cleanup now?\n\nThis cleans safe temporary/cache locations only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads."
+            "Run safe cleanup now?\n\nThis cleans safe temporary files and app caches only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads."
         ):
             return
         self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])

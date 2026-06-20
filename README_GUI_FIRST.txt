@@ -36,6 +36,17 @@ Safety guardrails
 - Registry cleaning is not included.
 - Driver cleanup is not included.
 
+Safe cleanup categories
+-----------------------
+
+Safe Cleanup may include temporary files and app caches for Windows, browsers,
+Discord, Microsoft Teams, Slack, and Zoom. These categories are limited to
+cache, temp, log, and crash-report folders.
+
+BayouFinds skips each communication app if that app is running. It does not
+delete app settings, downloads, documents, credentials, message history, saved
+sessions, workspaces, or application configuration.
+
 Buttons
 -------
 
@@ -46,7 +57,7 @@ Buttons
   Runs preview mode and creates a report without deleting files.
 
 - Run Safe Cleanup
-  Cleans safe temporary/cache locations only.
+  Cleans safe temporary files and app caches only.
 
 - Deep Windows Check
   Runs Safe Cleanup with additional Windows file checks. This may take longer.
