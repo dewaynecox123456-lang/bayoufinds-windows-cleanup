@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
 import webbrowser
 from math import ceil
 from pathlib import Path
-from tkinter import PhotoImage, Tk, Toplevel, messagebox
+from tkinter import PhotoImage, Tk, Toplevel, filedialog, messagebox
 from tkinter import BOTH, END, LEFT, RIGHT, X, Y
 from tkinter import scrolledtext, ttk
 
@@ -269,6 +271,7 @@ class BayouFindsCleanupGUI:
         file_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
         help_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
 
+        file_menu.add_command(label="Import License", command=self.import_license)
         file_menu.add_command(label="Open Log Folder", command=self.open_log_folder)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.destroy)
@@ -327,7 +330,24 @@ class BayouFindsCleanupGUI:
                 font=("Segoe UI", 13, "bold"),
             ).pack(anchor="w", pady=(0, 12))
 
+        ttk.Label(
+            controls,
+            text="Recommended customer flow",
+            background=PANEL,
+            foreground=TEXT,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            controls,
+            text="1. Import License\n2. Scan My PC\n3. Review results\n4. Run Safe Cleanup",
+            background=PANEL,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
         self.buttons: list[ttk.Button] = []
+        self._add_action_button(controls, "Import License", self.import_license)
         self._add_action_button(controls, "Scan My PC", self.health_check)
         self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup)
         self._add_secondary_button(controls, "Advanced Cleanup", self.deep_cleanup)
@@ -335,7 +355,7 @@ class BayouFindsCleanupGUI:
         self._add_action_button(controls, "License Status", self.license_status)
 
         ttk.Separator(controls).pack(fill=X, pady=12)
-        self._add_secondary_button(controls, "Open Log Folder", self.open_log_folder)
+        self._add_secondary_button(controls, "Open Reports / Logs", self.open_log_folder)
         self._add_secondary_button(controls, "About", self.show_about)
         self._add_secondary_button(controls, "Exit", self.root.destroy)
 
@@ -373,7 +393,7 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Step 1: Click Scan My PC to preview findings.\nStep 2: Review the output.\nStep 3: Run Safe Cleanup only after you are ready.\n\nBayouFinds never deletes personal Documents, Pictures, or Downloads by default.\n\n",
+            "Welcome to BayouFinds Cleanup Assistant.\n\nRecommended customer flow:\n1. Import your license file if this is your first run.\n2. Click Scan My PC to preview findings.\n3. Review the results shown here.\n4. Click Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds does not delete personal Documents, Pictures, Videos, Music, Desktop files, or Downloads by default.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
         )
         self.output.configure(state="disabled")
 
@@ -386,6 +406,57 @@ class BayouFindsCleanupGUI:
         button = ttk.Button(parent, text=label, style="Secondary.TButton", command=command)
         button.pack(fill=X, pady=5)
         self.buttons.append(button)
+
+    def import_license(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Select BayouFinds license.json",
+            filetypes=[("BayouFinds license", "license.json"), ("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+
+        source = Path(selected)
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+        except Exception as exc:
+            messagebox.showerror(
+                WINDOW_TITLE,
+                f"Could not read this license file.\n\n{exc}",
+            )
+            return
+
+        product = str(data.get("product") or data.get("product_id") or data.get("app") or "").lower()
+        customer = data.get("customer") or data.get("customer_name") or data.get("name") or "Customer"
+        expires = data.get("expires") or data.get("expires_at") or data.get("expiration") or "Not listed"
+
+        if product and "cleanup" not in product and "bayoufinds-windows-cleanup" not in product:
+            if not messagebox.askyesno(
+                WINDOW_TITLE,
+                "This license does not appear to be for BayouFinds Cleanup Assistant.\n\nImport it anyway?",
+            ):
+                return
+
+        license_dir = Path.home() / ".bayoufinds"
+        license_dir.mkdir(parents=True, exist_ok=True)
+        destination = license_dir / "license.json"
+
+        try:
+            shutil.copy2(source, destination)
+        except Exception as exc:
+            messagebox.showerror(
+                WINDOW_TITLE,
+                f"Could not install the license file.\n\n{exc}",
+            )
+            return
+
+        self._append_output(
+            f"License imported successfully.\nInstalled to: {destination}\nCustomer: {customer}\nExpires: {expires}\n\n"
+        )
+        self.status_label.configure(text="License imported", foreground=SUCCESS)
+        messagebox.showinfo(
+            WINDOW_TITLE,
+            f"License imported successfully.\n\nCustomer: {customer}\nExpires: {expires}\n\nYou can now click License Status to verify activation.",
+        )
 
     def quick_cleanup(self) -> None:
         if not messagebox.askyesno(
@@ -515,14 +586,21 @@ class BayouFindsCleanupGUI:
 
     def _handle_done(self, exit_code: int) -> None:
         self._append_output(f"\nFinished with exit code {exit_code}.\n")
+        self._append_output(f"Reports and logs are saved here:\n{self.log_folder}\n")
         self._set_running(False)
 
         if exit_code == 0:
             self.status_label.configure(text="Completed successfully", foreground=SUCCESS)
-            messagebox.showinfo(WINDOW_TITLE, "Action completed successfully.")
+            messagebox.showinfo(
+                WINDOW_TITLE,
+                "Task completed successfully.\n\nReview the on-screen results and logs before running additional actions.\n\nReports are saved on your Desktop in:\nBayouFinds_Cleanup_Logs",
+            )
         else:
             self.status_label.configure(text="Completed with errors", foreground=ERROR)
-            messagebox.showerror(WINDOW_TITLE, f"Action failed with exit code {exit_code}.")
+            messagebox.showerror(
+                WINDOW_TITLE,
+                f"Task finished with errors.\n\nExit code: {exit_code}\n\nOpen the log folder and review the report before running cleanup again.",
+            )
 
     def _set_running(self, running: bool) -> None:
         for button in self.buttons:
