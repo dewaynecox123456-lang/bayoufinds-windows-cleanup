@@ -1,4 +1,4 @@
-"""BayouFinds Windows Cleanup v1.2 Tkinter GUI."""
+"""BayouFinds Windows Cleanup v1.3.0 Tkinter GUI."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ except ImportError:
 
 
 APP_NAME = "BayouFinds Cleanup Assistant"
-APP_VERSION = "v1.2"
+APP_VERSION = "v1.3.0"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION} Beta"
 WINDOW_SIZE = "900x600"
 WINDOW_WIDTH = 900
@@ -272,7 +272,8 @@ class BayouFindsCleanupGUI:
         help_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
 
         file_menu.add_command(label="Import License", command=self.import_license)
-        file_menu.add_command(label="Open Log Folder", command=self.open_log_folder)
+        file_menu.add_command(label="Open Latest Report", command=self.open_latest_report)
+        file_menu.add_command(label="Open Reports Folder", command=self.open_log_folder)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.destroy)
         help_menu.add_command(label="About", command=self.show_about)
@@ -301,7 +302,7 @@ class BayouFindsCleanupGUI:
             ttk.Label(header, text="BayouFinds", style="Header.TLabel").pack(anchor="w")
             ttk.Label(
                 header,
-                text="Windows cleanup, reporting, and repair utility",
+                text="Scan first, review results, then run safe cleanup",
                 style="Subheader.TLabel",
             ).pack(anchor="w", pady=(2, 0))
 
@@ -348,14 +349,15 @@ class BayouFindsCleanupGUI:
 
         self.buttons: list[ttk.Button] = []
         self._add_action_button(controls, "Import License", self.import_license)
-        self._add_action_button(controls, "Scan My PC", self.health_check)
+        self._add_action_button(controls, "Scan My PC", self.scan_my_pc)
         self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup)
-        self._add_secondary_button(controls, "Advanced Cleanup", self.deep_cleanup)
-        self._add_action_button(controls, "Repair Windows Files", self.repair_windows_files)
+        self._add_secondary_button(controls, "Deep Windows Check", self.deep_cleanup)
+        self._add_secondary_button(controls, "Repair Windows Files", self.repair_windows_files)
         self._add_action_button(controls, "License Status", self.license_status)
 
         ttk.Separator(controls).pack(fill=X, pady=12)
-        self._add_secondary_button(controls, "Open Reports / Logs", self.open_log_folder)
+        self._add_secondary_button(controls, "Open Latest Report", self.open_latest_report)
+        self._add_secondary_button(controls, "Open Reports Folder", self.open_log_folder)
         self._add_secondary_button(controls, "About", self.show_about)
         self._add_secondary_button(controls, "Exit", self.root.destroy)
 
@@ -393,7 +395,7 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Welcome to BayouFinds Cleanup Assistant.\n\nRecommended customer flow:\n1. Import your license file if this is your first run.\n2. Click Scan My PC to preview findings.\n3. Review the results shown here.\n4. Click Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds does not delete personal Documents, Pictures, Videos, Music, Desktop files, or Downloads by default.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
+            "Welcome to BayouFinds Cleanup Assistant.\n\nStart with Scan My PC. It creates a report without deleting files.\n\nRecommended customer flow:\n1. Import your license file if this is your first run.\n2. Click Scan My PC to preview findings.\n3. Review the results shown here or click Open Latest Report.\n4. Click Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds does not delete personal Documents, Pictures, Videos, Music, Desktop files, or Downloads by default.\nBayouFinds does not perform registry cleaning or driver cleanup.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
         )
         self.output.configure(state="disabled")
 
@@ -461,21 +463,21 @@ class BayouFindsCleanupGUI:
     def quick_cleanup(self) -> None:
         if not messagebox.askyesno(
             "Run Safe Cleanup",
-            "Run safe cleanup now?\n\nThis will clean safe temporary/cache locations only.\nIt will not delete your Documents, Pictures, or Downloads."
+            "Run safe cleanup now?\n\nThis cleans safe temporary/cache locations only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads."
         ):
             return
         self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
 
     def deep_cleanup(self) -> None:
         if not messagebox.askyesno(
-            "Advanced Cleanup",
-            "Advanced Cleanup may take longer and run additional Windows checks.\n\nUse this only if you understand the difference from Safe Cleanup. Continue?"
+            "Deep Windows Check",
+            "Deep Windows Check may take longer because it runs additional Windows file checks.\n\nIt still uses the safe cleanup engine. Continue?"
         ):
             return
-        self.run_cleanup("Advanced Cleanup", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
+        self.run_cleanup("Deep Windows Check", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
 
-    def windows_health_check(self) -> None:
-        self.run_cleanup("Windows Health Check", ["-NoMenu", "-Mode", "Preview"])
+    def scan_my_pc(self) -> None:
+        self.run_cleanup("Scan My PC", ["-NoMenu", "-Mode", "Preview"])
 
     def repair_windows_files(self) -> None:
         self.run_cleanup("Repair Windows Files", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
@@ -593,7 +595,7 @@ class BayouFindsCleanupGUI:
             self.status_label.configure(text="Completed successfully", foreground=SUCCESS)
             messagebox.showinfo(
                 WINDOW_TITLE,
-                "Task completed successfully.\n\nReview the on-screen results and logs before running additional actions.\n\nReports are saved on your Desktop in:\nBayouFinds_Cleanup_Logs",
+                "Task completed successfully.\n\nReview the on-screen results or click Open Latest Report before running additional actions.\n\nReports are saved on your Desktop in:\nBayouFinds_Cleanup_Logs",
             )
         else:
             self.status_label.configure(text="Completed with errors", foreground=ERROR)
@@ -630,6 +632,31 @@ class BayouFindsCleanupGUI:
         else:
             webbrowser.open(self.log_folder.as_uri())
 
+    def open_latest_report(self) -> None:
+        latest_report = self._find_latest_report()
+        if not latest_report:
+            messagebox.showinfo(
+                WINDOW_TITLE,
+                "No cleanup report was found yet.\n\nClick Scan My PC first, then use Open Latest Report.",
+            )
+            return
+
+        if os.name == "nt":
+            os.startfile(latest_report)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(latest_report.as_uri())
+
+    def _find_latest_report(self) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        reports = sorted(
+            self.log_folder.glob("cleanup_report_*.html"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        return reports[0] if reports else None
+
     def show_about(self) -> None:
         about = Toplevel(self.root)
         about.title(f"About {APP_NAME}")
@@ -648,7 +675,7 @@ class BayouFindsCleanupGUI:
         ttk.Label(frame, text="https://bayoufinds.com", style="Muted.TLabel").pack(anchor="w", pady=(4, 12))
         ttk.Label(
             frame,
-            text="A customer-controlled Windows cleanup and reporting utility.",
+            text="A scan-first Windows cleanup and reporting utility for home users.",
             style="TLabel",
             wraplength=390,
         ).pack(anchor="w", pady=(0, 20))

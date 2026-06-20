@@ -1,43 +1,88 @@
-BayouFinds Windows Cleanup v1.2 - Tkinter GUI
-=============================================
+BayouFinds Cleanup Assistant v1.3.0 Beta
+========================================
 
-Recommended customer launch:
+Customer setup
+--------------
 
-  Double-click BayouFindsWindowsCleanup.exe.
+1. Copy the BayouFindsWindowsCleanup release folder to the Windows PC.
+2. Open the release folder.
+3. Double-click BayouFindsWindowsCleanup.exe.
+4. If Windows SmartScreen appears, choose More info, then Run anyway only if
+   the file came directly from BayouFinds.
+5. If you received a license file, click Import License and select
+   license.json.
 
-Developer source launch:
+Recommended customer flow
+-------------------------
 
-  python gui\BayouFindsCleanupGUI.py
+1. Import License
+2. Scan My PC
+3. Review results
+4. Run Safe Cleanup
 
-The GUI is a professional dark-theme desktop app for BayouFinds Windows
-Cleanup. It runs the existing PowerShell cleanup script without blocking the UI
-and streams live output into the status window.
+Start with Scan My PC. The scan creates a report without deleting files. After
+the scan completes, review the on-screen results or click Open Latest Report.
+Run Safe Cleanup only after reviewing the scan results.
+
+Safety guardrails
+-----------------
+
+- Documents are not deleted by default.
+- Pictures are not deleted by default.
+- Desktop files are not deleted by default.
+- Videos are not deleted by default.
+- Music is not deleted by default.
+- Downloads are not deleted by default.
+- Registry cleaning is not included.
+- Driver cleanup is not included.
 
 Buttons
 -------
 
-- Quick Cleanup
-  Runs BayouFinds_Windows_Cleanup.ps1 in SafeCleanup mode.
+- Import License
+  Installs your BayouFinds license file.
 
-- Deep Cleanup
-  Runs SafeCleanup mode with SFC enabled.
+- Scan My PC
+  Runs preview mode and creates a report without deleting files.
 
-- Windows Health Check
-  Runs Preview mode to inspect/report without deleting cleanup targets.
+- Run Safe Cleanup
+  Cleans safe temporary/cache locations only.
+
+- Deep Windows Check
+  Runs Safe Cleanup with additional Windows file checks. This may take longer.
 
 - Repair Windows Files
-  Runs SafeCleanup mode with SFC enabled for DISM/SFC repair workflow.
+  Runs the Windows repair/check workflow for DISM/SFC support.
 
 - License Status
-  Runs LicenseCheck mode.
+  Checks the installed license.
 
-- Open Log Folder
+- Open Latest Report
+  Opens the newest HTML report from the reports folder.
+
+- Open Reports Folder
   Opens Desktop\BayouFinds_Cleanup_Logs.
 
 - Exit
-  Closes the GUI.
+  Closes the app.
 
-PyInstaller Build
+Reports
+-------
+
+Reports and logs are saved here:
+
+  Desktop\BayouFinds_Cleanup_Logs
+
+Each scan or cleanup run creates an HTML report, JSON report, and log file.
+
+Developer source launch
+-----------------------
+
+From the repository root:
+
+  python gui\BayouFindsCleanupGUI.py
+
+PyInstaller build
 -----------------
 
 Run from the repository root on Windows:
@@ -63,7 +108,7 @@ or replace it without rebuilding the GUI.
 Artwork
 -------
 
-Place optional GUI artwork here before building:
+Optional GUI artwork:
 
 - assets\header_banner.png
 - assets\cleanup_mascot.png
@@ -76,28 +121,5 @@ To create optimized artwork:
 
   python scripts\optimize-artwork.py
 
-Optimization targets:
-
-- header_banner.png: 900px wide
-- cleanup_mascot.png: 340px max height
-- splash.png: 720px wide max
-
-The GUI loads these files automatically when present:
-
-- header_banner.png displays across the top of the main window.
-- cleanup_mascot.png displays in the dashboard/action area.
-- splash.png displays for about 2.4 seconds on startup.
-
-The GUI looks in assets\optimized\ first, then falls back to assets\. If an
-artwork file is missing, the GUI falls back to branded text and continues
-running. The PyInstaller build script bundles optimized artwork when present,
-then falls back to original artwork.
-
-Files Added
------------
-
-- gui\BayouFindsCleanupGUI.py
-- assets\app_icon.ico
-- scripts\build-windows-gui.ps1
-- scripts\optimize-artwork.py
-- README_GUI_FIRST.txt
+The GUI loads assets\optimized\ first, then falls back to assets\. If an artwork
+file is missing, the GUI falls back to branded text and continues running.
