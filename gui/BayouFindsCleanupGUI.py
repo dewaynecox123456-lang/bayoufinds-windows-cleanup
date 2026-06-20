@@ -21,9 +21,9 @@ except ImportError:
     ImageTk = None
 
 
-APP_NAME = "BayouFinds Windows Cleanup"
+APP_NAME = "BayouFinds Cleanup Assistant"
 APP_VERSION = "v1.2"
-WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
+WINDOW_TITLE = f"{APP_NAME} {APP_VERSION} Beta"
 WINDOW_SIZE = "900x600"
 WINDOW_WIDTH = 900
 WINDOW_HEIGHT = 600
@@ -328,9 +328,9 @@ class BayouFindsCleanupGUI:
             ).pack(anchor="w", pady=(0, 12))
 
         self.buttons: list[ttk.Button] = []
-        self._add_action_button(controls, "Quick Cleanup", self.quick_cleanup)
-        self._add_action_button(controls, "Deep Cleanup", self.deep_cleanup)
-        self._add_action_button(controls, "Windows Health Check", self.windows_health_check)
+        self._add_action_button(controls, "Scan My PC", self.health_check)
+        self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup)
+        self._add_secondary_button(controls, "Advanced Cleanup", self.deep_cleanup)
         self._add_action_button(controls, "Repair Windows Files", self.repair_windows_files)
         self._add_action_button(controls, "License Status", self.license_status)
 
@@ -373,7 +373,7 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Select an action to begin. Output from BayouFinds_Windows_Cleanup.ps1 will appear here.\n",
+            "Step 1: Click Scan My PC to preview findings.\nStep 2: Review the output.\nStep 3: Run Safe Cleanup only after you are ready.\n\nBayouFinds never deletes personal Documents, Pictures, or Downloads by default.\n\n",
         )
         self.output.configure(state="disabled")
 
@@ -388,10 +388,20 @@ class BayouFindsCleanupGUI:
         self.buttons.append(button)
 
     def quick_cleanup(self) -> None:
-        self.run_cleanup("Quick Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
+        if not messagebox.askyesno(
+            "Run Safe Cleanup",
+            "Run safe cleanup now?\n\nThis will clean safe temporary/cache locations only.\nIt will not delete your Documents, Pictures, or Downloads."
+        ):
+            return
+        self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
 
     def deep_cleanup(self) -> None:
-        self.run_cleanup("Deep Cleanup", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
+        if not messagebox.askyesno(
+            "Advanced Cleanup",
+            "Advanced Cleanup may take longer and run additional Windows checks.\n\nUse this only if you understand the difference from Safe Cleanup. Continue?"
+        ):
+            return
+        self.run_cleanup("Advanced Cleanup", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
 
     def windows_health_check(self) -> None:
         self.run_cleanup("Windows Health Check", ["-NoMenu", "-Mode", "Preview"])
