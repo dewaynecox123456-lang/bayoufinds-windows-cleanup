@@ -285,6 +285,50 @@ class GlassButton(Frame):
     config = configure
 
 
+class CanvasTextProxy:
+    def __init__(self, canvas: Canvas, item_id: int) -> None:
+        self.canvas = canvas
+        self.item_id = item_id
+
+    def configure(self, cnf=None, **kwargs) -> None:
+        if cnf:
+            kwargs.update(cnf)
+        item_options = {}
+        if "text" in kwargs:
+            item_options["text"] = kwargs["text"]
+        if "foreground" in kwargs:
+            item_options["fill"] = kwargs["foreground"]
+        if "fill" in kwargs:
+            item_options["fill"] = kwargs["fill"]
+        if item_options:
+            self.canvas.itemconfigure(self.item_id, **item_options)
+
+    config = configure
+
+
+class CanvasOutputProxy:
+    def __init__(self, canvas: Canvas, item_id: int) -> None:
+        self.canvas = canvas
+        self.item_id = item_id
+        self.text = ""
+
+    def configure(self, cnf=None, **kwargs) -> None:
+        return
+
+    config = configure
+
+    def delete(self, _start, _end=None) -> None:
+        self.text = ""
+        self.canvas.itemconfigure(self.item_id, text="")
+
+    def insert(self, _index, text: str) -> None:
+        self.text += text
+        self.canvas.itemconfigure(self.item_id, text=self.text[-2600:])
+
+    def see(self, _index) -> None:
+        return
+
+
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
     candidates: list[Path] = []
 
@@ -627,300 +671,308 @@ class BayouFindsCleanupGUI:
         card.inner._glass_outer = card  # type: ignore[attr-defined]
         return card.inner
 
-    def _build_layout(self) -> None:
-        outer = ttk.Frame(self.root, style="Main.TFrame")
-        outer.pack(fill=BOTH, expand=True)
-
-        sidebar_panel = GlassCard(
-            outer,
-            fill=SIDEBAR,
-            border="#2c7272",
-            bg=BG,
-            shadow=GLOW,
-            glow=True,
-            radius=30,
-            padding=12,
-            min_width=230,
-            min_height=640,
+    def _canvas_text(
+        self,
+        x: int,
+        y: int,
+        text: str,
+        fill: str = TEXT,
+        font: tuple = ("Segoe UI", 10),
+        width: int | None = None,
+        anchor: str = "nw",
+    ) -> CanvasTextProxy:
+        item = self.dashboard_canvas.create_text(
+            x,
+            y,
+            text=text,
+            fill=fill,
+            font=font,
+            width=width,
+            anchor=anchor,
         )
-        sidebar_panel.pack(side=LEFT, fill=Y, padx=(18, 0), pady=18)
-        sidebar_panel.configure(width=230)
-        sidebar_panel.pack_propagate(False)
+        return CanvasTextProxy(self.dashboard_canvas, item)
 
-        nav_inner = Frame(sidebar_panel.inner, bg=SIDEBAR)
-        nav_inner.pack(fill=BOTH, expand=True, padx=16, pady=16)
+    def _canvas_panel(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        fill: str = CARD,
+        radius: int = 26,
+        glow: bool = False,
+        border: str = CARD_BORDER,
+    ) -> None:
+        shadow = GLOW if glow else SHADOW
+        draw_round_rect(self.dashboard_canvas, x + 8, y + 10, x + width + 8, y + height + 10, radius, fill=shadow, outline="")
+        draw_round_rect(
+            self.dashboard_canvas,
+            x,
+            y,
+            x + width,
+            y + height,
+            radius,
+            fill=fill,
+            outline=CARD_HIGHLIGHT if glow else border,
+            width=1,
+        )
+        draw_round_rect(
+            self.dashboard_canvas,
+            x + 10,
+            y + 8,
+            x + width - 10,
+            y + max(32, height // 3),
+            max(12, radius - 9),
+            fill="#1a5054",
+            outline="",
+        )
 
-        ttk.Label(nav_inner, text="BayouFinds", style="SidebarTitle.TLabel").pack(anchor="w")
-        ttk.Label(nav_inner, text="Cleanup Assistant", style="SidebarMuted.TLabel").pack(anchor="w", pady=(2, 18))
+    def _canvas_button(
+        self,
+        x: int,
+        y: int,
+        text: str,
+        command,
+        width: int,
+        height: int,
+        fill: str,
+        active_fill: str,
+        foreground: str = TEXT,
+        glow: bool = False,
+        disabled_fill: str = "#1b3337",
+        disabled_foreground: str = "#77928e",
+        font: tuple = ("Segoe UI", 10, "bold"),
+        register: bool = True,
+    ) -> GlassButton:
+        button = GlassButton(
+            self.dashboard_canvas,
+            text=text,
+            command=command,
+            width=width,
+            height=height,
+            fill=fill,
+            active_fill=active_fill,
+            foreground=foreground,
+            disabled_fill=disabled_fill,
+            disabled_foreground=disabled_foreground,
+            glow=glow,
+            radius=max(16, min(26, height // 2)),
+            font=font,
+            bg=BG,
+        )
+        self.dashboard_canvas.create_window(x, y, window=button, anchor="nw", width=width, height=height)
+        if register:
+            self.buttons.append(button)
+        return button
 
-        for label, command in [
+    def _build_layout(self) -> None:
+        self.dashboard_canvas = Canvas(self.root, bg=BG, bd=0, highlightthickness=0)
+        self.dashboard_canvas.pack(fill=BOTH, expand=True)
+
+        self._canvas_panel(20, 20, 226, 660, fill=SIDEBAR, radius=34, glow=True, border="#2c7272")
+        self._canvas_text(48, 48, "BayouFinds", fill=TEXT, font=("Segoe UI", 18, "bold"))
+        self._canvas_text(48, 76, "Cleanup Assistant", fill=MUTED, font=("Segoe UI", 10))
+
+        nav_items = [
             ("Home", lambda: self._set_view("Home")),
             ("Scan", self.scan_my_pc),
             ("Cleanup", self.quick_cleanup),
             ("Reports", self.open_latest_report),
             ("License", self.license_status),
             ("Help", self.show_about),
-        ]:
-            self._add_sidebar_button(nav_inner, label, command)
+        ]
+        for index, (label, command) in enumerate(nav_items):
+            button = self._canvas_button(
+                46,
+                120 + (index * 48),
+                label,
+                command,
+                166,
+                40,
+                SIDEBAR,
+                "#1d6868",
+                foreground="#e8fbf6",
+                glow=False,
+                font=("Segoe UI", 10, "bold"),
+                register=False,
+            )
+            self.sidebar_buttons[label] = button
 
-        Frame(nav_inner, bg=SIDEBAR).pack(fill=BOTH, expand=True)
+        self._canvas_panel(42, 452, 166, 112, fill="#11373b", radius=22, glow=True)
+        self._canvas_text(60, 472, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self.license_value_label = self._canvas_text(
+            60,
+            494,
+            "● LICENSE REQUIRED",
+            fill=ERROR,
+            font=("Segoe UI", 10, "bold"),
+            width=138,
+        )
+        self._canvas_text(60, 530, "Trial mode:\nscan and reports only", fill=MUTED, font=("Segoe UI", 8), width=138)
 
-        license_panel = self._glass_card(nav_inner, fill="#11373b", padding=10, glow=True, bg=SIDEBAR)
-        license_panel._glass_outer.pack(fill=X, pady=(0, 12))  # type: ignore[attr-defined]
-        ttk.Label(
-            license_panel,
-            text="License",
-            background="#11373b",
-            foreground=MUTED,
+        self._canvas_button(
+            42,
+            586,
+            "🛒 Purchase License",
+            self.purchase_license,
+            166,
+            40,
+            "#173f44",
+            "#22595e",
+            foreground=TEXT,
+            glow=True,
             font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w")
-        self.license_value_label = ttk.Label(
-            license_panel,
-            text="● LICENSE REQUIRED",
-            background="#11373b",
-            foreground=ERROR,
-            font=("Segoe UI", 12, "bold"),
         )
-        self.license_value_label.pack(anchor="w", pady=(2, 0))
-        ttk.Label(
-            license_panel,
-            text="Trial: scan and reports only",
-            background="#11373b",
-            foreground=MUTED,
-            font=("Segoe UI", 8),
-        ).pack(anchor="w", pady=(2, 0))
-
-        self._add_sidebar_button(nav_inner, "Purchase License", self.purchase_license)
-        self._add_sidebar_button(nav_inner, "Import License", self.import_license)
-
-        main = ttk.Frame(outer, style="Main.TFrame", padding=(22, 18, 18, 18))
-        main.pack(side=RIGHT, fill=BOTH, expand=True)
-
-        header = ttk.Frame(main, style="Main.TFrame")
-        header.pack(fill=X)
-
-        header_text = ttk.Frame(header, style="Main.TFrame")
-        header_text.pack(side=LEFT, fill=X, expand=True)
-        self.view_title_label = ttk.Label(header_text, text="Home", style="Header.TLabel")
-        self.view_title_label.pack(anchor="w")
-        self.view_subtitle_label = ttk.Label(
-            header_text,
-            text="A calm, scan-first way to care for your PC.",
-            style="Subheader.TLabel",
-        )
-        self.view_subtitle_label.pack(anchor="w", pady=(2, 0))
-
-        header_image = self._load_image_fit(
-            "header_banner.png",
-            180,
-            HEADER_IMAGE_MAX_HEIGHT,
-            allow_upscale=False,
-        )
-        if header_image:
-            ttk.Label(header, image=header_image, background=BG).pack(side=RIGHT, padx=(16, 0))
-
-        dashboard = ttk.Frame(main, style="Main.TFrame")
-        dashboard.pack(fill=X, pady=(16, 12))
-
-        self.recoverable_value_label = self._add_metric_card(
-            dashboard,
-            "◌",
-            "Recoverable Space",
-            "Not scanned yet",
-            "Scan first to estimate safe space.",
-            0,
-            0,
-        )
-        self.recovered_run_value_label = self._add_metric_card(
-            dashboard,
-            "✓",
-            "Recovered This Run",
-            "Not run yet",
-            "Cleanup totals appear here.",
-            0,
-            1,
-        )
-        self.total_recovered_value_label = self._add_metric_card(
-            dashboard,
-            "↟",
-            "Total Recovered",
-            "No cleanup yet",
-            "Saved over time on this PC.",
-            0,
-            2,
-        )
-        self.health_score_value_label = self._add_metric_card(
-            dashboard,
-            "♡",
-            "PC Health",
-            "Not scanned yet",
-            "A simple cleanup readiness score.",
-            0,
-            3,
-        )
-        for column in range(4):
-            dashboard.columnconfigure(column, weight=1)
-
-        action_row = self._glass_card(main, fill=CARD_SOFT, padding=16, glow=True)
-        action_row._glass_outer.pack(fill=X, pady=(0, 12))  # type: ignore[attr-defined]
-        action_text = Frame(action_row, bg=CARD_SOFT)
-        action_text.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 16))
-        ttk.Label(
-            action_text,
-            text="Start with a safe scan",
-            background=CARD_SOFT,
-            foreground=TEXT,
-            font=("Segoe UI", 14, "bold"),
-        ).pack(anchor="w")
-        ttk.Label(
-            action_text,
-            text="Scan My PC checks for safe cleanup space. It does not delete files.",
-            background=CARD_SOFT,
-            foreground=MUTED,
-            font=("Segoe UI", 10),
-            wraplength=420,
-        ).pack(anchor="w", pady=(4, 0))
-        action_buttons = Frame(action_row, bg=CARD_SOFT)
-        action_buttons.pack(side=RIGHT, fill=X)
-        self._add_primary_button(action_buttons, "Scan My PC", self.scan_my_pc)
-        self._add_action_button(action_buttons, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
-        small_buttons = Frame(action_buttons, bg=CARD_SOFT)
-        small_buttons.pack(fill=X)
-        self._add_secondary_button(small_buttons, "Purchase License", self.purchase_license, side=LEFT)
-        self._add_secondary_button(small_buttons, "Import License", self.import_license, side=RIGHT)
-
-        trust_row = ttk.Frame(main, style="Main.TFrame")
-        trust_row.pack(fill=X, pady=(0, 12))
-
-        protected = self._glass_card(trust_row, fill=CARD, padding=14)
-        protected._glass_outer.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))  # type: ignore[attr-defined]
-        ttk.Label(
-            protected,
-            text="Protected by Default",
-            background=CARD,
-            foreground=SUCCESS,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
-        ttk.Label(
-            protected,
-            text="✓ Documents    ✓ Pictures    ✓ Downloads    ✓ Desktop\n✓ Videos       ✓ Music       ✓ Browser Passwords\n✓ Saved Logins",
-            background=CARD,
-            foreground=TEXT,
-            font=("Segoe UI", 10),
-            justify="left",
-        ).pack(anchor="w", pady=(8, 0))
-
-        guardrails = self._glass_card(trust_row, fill=CARD, padding=14)
-        guardrails._glass_outer.pack(side=RIGHT, fill=BOTH, expand=True, padx=(8, 0))  # type: ignore[attr-defined]
-        ttk.Label(
-            guardrails,
-            text="Safe Cleanup Rules",
-            background=CARD,
-            foreground=TEXT,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
-        ttk.Label(
-            guardrails,
-            text="No registry cleaning\nNo driver cleanup\nApps are skipped while running",
-            background=CARD,
-            foreground=MUTED,
-            font=("Segoe UI", 10),
-            justify="left",
-        ).pack(anchor="w", pady=(8, 0))
-
-        self.last_scan_value_label = ttk.Label(
-            main,
-            text="Last Scan: Not run yet",
-            background=BG,
-            foreground=MUTED,
-            font=("Segoe UI", 9),
-        )
-        self.last_scan_value_label.pack(anchor="w", pady=(0, 2))
-        self.recommendation_value_label = ttk.Label(
-            main,
-            text="Recommendation: Start with Scan My PC",
-            background=BG,
+        self._canvas_button(
+            42,
+            632,
+            "Import License",
+            self.import_license,
+            166,
+            36,
+            "#173f44",
+            "#22595e",
             foreground=TEXT,
             font=("Segoe UI", 9, "bold"),
         )
-        self.recommendation_value_label.pack(anchor="w", pady=(0, 10))
 
-        results_card = self._glass_card(main, fill="#0f3034", padding=14)
-        results_card._glass_outer.pack(fill=BOTH, expand=True)  # type: ignore[attr-defined]
-
-        self.result_banner_label = ttk.Label(
-            results_card,
-            text="Ready — Start with Scan My PC",
-            style="Banner.TLabel",
+        self.view_title_label = self._canvas_text(282, 34, "Home", fill=TEXT, font=("Segoe UI", 26, "bold"))
+        self.view_subtitle_label = self._canvas_text(
+            284,
+            72,
+            "A calm, scan-first way to care for your PC.",
+            fill=MUTED,
+            font=("Segoe UI", 11),
+            width=520,
         )
-        self.result_banner_label.pack(fill=X, pady=(0, 10))
 
-        results_header = Frame(results_card, bg="#0f3034")
-        results_header.pack(fill=X)
-        ttk.Label(
-            results_header,
-            text="Results Summary",
-            background="#0f3034",
-            foreground=MUTED,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(side=LEFT)
-        open_logs_button = GlassButton(
-            results_header,
-            text="Open Reports / Logs",
-            command=self.open_log_folder,
-            width=154,
-            height=40,
-            fill="#173f44",
-            active_fill="#22595e",
-            foreground=TEXT,
-            radius=16,
-            font=("Segoe UI", 9, "bold"),
-            bg="#0f3034",
-        )
-        open_logs_button.pack(side=RIGHT, padx=(8, 0))
-        self.buttons.append(open_logs_button)
-        technical_button = GlassButton(
-            results_header,
-            text="View Technical Details",
-            command=self.view_technical_details,
-            width=162,
-            height=40,
-            fill="#173f44",
-            active_fill="#22595e",
-            foreground=TEXT,
-            radius=16,
-            font=("Segoe UI", 9, "bold"),
-            bg="#0f3034",
-        )
-        technical_button.pack(side=RIGHT)
-        self.buttons.append(technical_button)
+        self._canvas_text(828, 36, APP_VERSION, fill=MUTED, font=("Segoe UI", 10, "bold"))
+        self._canvas_text(828, 58, "Premium glass dashboard", fill=ACCENT, font=("Segoe UI", 10), width=170)
 
-        self.status_label = ttk.Label(
-            results_card,
-            text="Ready",
-            background="#0f3034",
-            foreground=MUTED,
-            font=("Segoe UI", 10),
-        )
-        self.status_label.pack(anchor="w", pady=(4, 10))
+        metrics = [
+            ("◌", "Recoverable Space", "Not scanned yet", "Scan first to estimate safe space."),
+            ("✓", "Recovered This Run", "Not run yet", "Cleanup totals appear here."),
+            ("↟", "Total Recovered", "No cleanup yet", "Saved over time on this PC."),
+            ("♡", "PC Health Score", "Not scanned yet", "A simple cleanup readiness score."),
+        ]
+        metric_labels = []
+        for index, (symbol, label, value, helper) in enumerate(metrics):
+            x = 282 + (index * 184)
+            self._canvas_panel(x, 112, 170, 132, fill=CARD, radius=24, glow=index == 0)
+            self._canvas_text(x + 18, 130, symbol, fill=ACCENT if index == 0 else MUTED, font=("Segoe UI", 18, "bold"))
+            self._canvas_text(x + 18, 164, label, fill=MUTED, font=("Segoe UI", 8, "bold"), width=130)
+            metric_labels.append(
+                self._canvas_text(x + 18, 186, value, fill=TEXT, font=("Segoe UI", 14, "bold"), width=132)
+            )
+            self._canvas_text(x + 18, 220, helper, fill=MUTED, font=("Segoe UI", 8), width=132)
+        (
+            self.recoverable_value_label,
+            self.recovered_run_value_label,
+            self.total_recovered_value_label,
+            self.health_score_value_label,
+        ) = metric_labels
 
-        self.output = scrolledtext.ScrolledText(
-            results_card,
-            bg="#0a2428",
-            fg=TEXT,
-            insertbackground=TEXT,
-            selectbackground="#246063",
-            relief="flat",
-            wrap="word",
+        self._canvas_panel(282, 268, 440, 144, fill=CARD_SOFT, radius=28, glow=True)
+        self._canvas_text(306, 294, "Start with a safe scan", fill=TEXT, font=("Segoe UI", 18, "bold"))
+        self._canvas_text(
+            306,
+            326,
+            "Scan My PC checks for safe temporary files and app caches. It does not delete files.",
+            fill=MUTED,
+            font=("Segoe UI", 11),
+            width=250,
+        )
+        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=574, y=294)
+        self._add_action_button(
+            self.dashboard_canvas,
+            "Run Safe Cleanup",
+            self.quick_cleanup,
+            requires_license=True,
+            x=574,
+            y=360,
+        )
+
+        self._canvas_panel(742, 268, 270, 144, fill="#11373b", radius=28, glow=False)
+        self._canvas_text(766, 292, "License", fill=MUTED, font=("Segoe UI", 10, "bold"))
+        self._canvas_text(766, 320, "Cleanup unlocks after activation.", fill=TEXT, font=("Segoe UI", 12, "bold"), width=210)
+        self._canvas_text(766, 360, "Trial mode keeps scanning and reports available.", fill=MUTED, font=("Segoe UI", 10), width=214)
+        self._add_secondary_button(self.dashboard_canvas, "🛒 Purchase License", self.purchase_license, x=762, y=386, width=142)
+        self._add_secondary_button(self.dashboard_canvas, "Import", self.import_license, x=910, y=386, width=78)
+
+        self._canvas_panel(282, 432, 338, 224, fill=CARD, radius=28)
+        self._canvas_text(306, 458, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 14, "bold"))
+        protected_items = [
+            "✓ Documents",
+            "✓ Pictures",
+            "✓ Downloads",
+            "✓ Desktop",
+            "✓ Videos",
+            "✓ Music",
+            "✓ Browser Passwords",
+            "✓ Saved Logins",
+        ]
+        for index, item in enumerate(protected_items):
+            x = 306 if index % 2 == 0 else 456
+            y = 496 + ((index // 2) * 34)
+            self._canvas_text(x, y, item, fill=TEXT, font=("Segoe UI", 10, "bold"), width=138)
+        self.last_scan_value_label = self._canvas_text(306, 634, "Last Scan: Not run yet", fill=MUTED, font=("Segoe UI", 9))
+
+        self._canvas_panel(640, 432, 372, 224, fill="#0f3034", radius=28, glow=False)
+        self.result_banner_label = self._canvas_text(
+            666,
+            456,
+            "Scan Results",
+            fill=TEXT,
+            font=("Segoe UI", 16, "bold"),
+            width=220,
+        )
+        self.status_label = self._canvas_text(666, 486, "Ready", fill=MUTED, font=("Segoe UI", 10, "bold"))
+        output_item = self.dashboard_canvas.create_text(
+            666,
+            522,
+            text=(
+                "No scan has been run yet.\n\n"
+                "Click Scan My PC to check for safe temporary files and app caches."
+            ),
+            fill=TEXT,
             font=("Segoe UI", 12),
-            height=10,
+            width=300,
+            anchor="nw",
         )
-        self.output.pack(fill=BOTH, expand=True)
-        self.output.insert(
-            END,
-            "No scan has been run yet.\n\nClick Scan My PC to check for safe temporary files and app caches.\n\nTechnical details stay hidden until you click View Technical Details.",
+        self.output = CanvasOutputProxy(self.dashboard_canvas, output_item)
+        self._canvas_button(
+            666,
+            600,
+            "View Technical Details",
+            self.view_technical_details,
+            170,
+            40,
+            "#173f44",
+            "#22595e",
+            foreground=TEXT,
+            font=("Segoe UI", 9, "bold"),
         )
-        self.output.configure(state="disabled")
+        self._canvas_button(
+            846,
+            600,
+            "Open Reports",
+            self.open_log_folder,
+            132,
+            40,
+            "#173f44",
+            "#22595e",
+            foreground=TEXT,
+            font=("Segoe UI", 9, "bold"),
+        )
+
+        self.recommendation_value_label = self._canvas_text(
+            282,
+            662,
+            "Recommendation: Start with Scan My PC",
+            fill=TEXT,
+            font=("Segoe UI", 9, "bold"),
+            width=480,
+        )
         self._set_active_nav("Home")
 
     def _add_metric_card(
@@ -1045,7 +1097,15 @@ class BayouFindsCleanupGUI:
     def _set_result_banner(self, text: str, foreground: str = TEXT) -> None:
         self.result_banner_label.configure(text=text, foreground=foreground)
 
-    def _add_primary_button(self, parent, label: str, command, side: str | None = None) -> None:
+    def _add_primary_button(
+        self,
+        parent,
+        label: str,
+        command,
+        side: str | None = None,
+        x: int | None = None,
+        y: int | None = None,
+    ) -> None:
         button = GlassButton(
             parent,
             text=label,
@@ -1062,13 +1122,26 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 14, "bold"),
             bg=CARD_SOFT,
         )
+        if isinstance(parent, Canvas) and x is not None and y is not None:
+            parent.create_window(x, y, window=button, anchor="nw", width=248, height=62)
+            self.buttons.append(button)
+            return
         pack_options = {"fill": X, "pady": 6}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
         button.pack(**pack_options)
         self.buttons.append(button)
 
-    def _add_action_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
+    def _add_action_button(
+        self,
+        parent,
+        label: str,
+        command,
+        requires_license: bool = False,
+        side: str | None = None,
+        x: int | None = None,
+        y: int | None = None,
+    ) -> None:
         button = GlassButton(
             parent,
             text=label,
@@ -1085,6 +1158,12 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 10, "bold"),
             bg=CARD_SOFT,
         )
+        if isinstance(parent, Canvas) and x is not None and y is not None:
+            parent.create_window(x, y, window=button, anchor="nw", width=248, height=48)
+            self.buttons.append(button)
+            if requires_license:
+                self.licensed_buttons.append(button)
+            return
         pack_options = {"fill": X, "pady": 5}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
@@ -1093,12 +1172,22 @@ class BayouFindsCleanupGUI:
         if requires_license:
             self.licensed_buttons.append(button)
 
-    def _add_secondary_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
+    def _add_secondary_button(
+        self,
+        parent,
+        label: str,
+        command,
+        requires_license: bool = False,
+        side: str | None = None,
+        x: int | None = None,
+        y: int | None = None,
+        width: int = 120,
+    ) -> None:
         button = GlassButton(
             parent,
             text=label,
             command=command,
-            width=120,
+            width=width,
             height=40,
             fill="#173f44",
             active_fill="#22595e",
@@ -1110,6 +1199,12 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 9, "bold"),
             bg=CARD_SOFT,
         )
+        if isinstance(parent, Canvas) and x is not None and y is not None:
+            parent.create_window(x, y, window=button, anchor="nw", width=width, height=40)
+            self.buttons.append(button)
+            if requires_license:
+                self.licensed_buttons.append(button)
+            return
         pack_options = {"fill": X, "pady": 5}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
