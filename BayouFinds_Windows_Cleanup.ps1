@@ -17,7 +17,7 @@ param(
 
 #region Configuration
 $ErrorActionPreference = "SilentlyContinue"
-$ToolVersion = "1.1.0"
+$ToolVersion = "1.3.2"
 if ($OutputDir) {
     $LogDir = $OutputDir
 }
@@ -29,6 +29,7 @@ $SafeSessionId = $SessionId -replace '[^\w-]', '_'
 $LogFile = Join-Path -Path $LogDir -ChildPath "cleanup_${TimeStamp}_${SafeSessionId}.log"
 $HtmlReport = Join-Path -Path $LogDir -ChildPath "cleanup_report_${TimeStamp}_${SafeSessionId}.html"
 $JsonReport = Join-Path -Path $LogDir -ChildPath "cleanup_report_${TimeStamp}_${SafeSessionId}.json"
+$StatsFile = Join-Path -Path $LogDir -ChildPath "cleanup_stats.json"
 $BrowserBackupDir = Join-Path -Path (Join-Path -Path $LogDir -ChildPath "Browser_Backups") -ChildPath $SafeSessionId
 $InteractiveMode = [Environment]::UserInteractive -and -not $env:CI -and -not $WhatIfPreference
 $StartTime = Get-Date
@@ -76,7 +77,14 @@ function New-CleanupReportModel {
             Log = $LogFile
             HtmlReport = $HtmlReport
             JsonReport = $JsonReport
+            StatsFile = $StatsFile
             BrowserBackupDir = $BrowserBackupDir
+        }
+        Statistics = [ordered]@{
+            RecoverableBytes = 0
+            RecoveredBytes = 0
+            TotalRecoveredBytes = 0
+            PCHealthScore = 100
         }
         CleanupTargetsEstimated = 0
         CleanupCategoriesProcessed = @()
@@ -138,6 +146,119 @@ function Add-ReportBrowserBackup {
     }
 }
 
+function Get-CleanupMetricTotals {
+    $recoverableBytes = 0L
+    $recoveredBytes = 0L
+
+    if (!$script:CleanupReport) {
+        return [ordered]@{
+            RecoverableBytes = $recoverableBytes
+            RecoveredBytes = $recoveredBytes
+        }
+    }
+
+    foreach ($category in $script:CleanupReport.CleanupCategories) {
+        if ($null -ne $category.EstimatedBytes) {
+            $recoverableBytes += [int64]$category.EstimatedBytes
+        }
+
+        if ($null -ne $category.ActualBytesRemoved) {
+            $recoveredBytes += [int64]$category.ActualBytesRemoved
+        }
+    }
+
+    return [ordered]@{
+        RecoverableBytes = $recoverableBytes
+        RecoveredBytes = $recoveredBytes
+    }
+}
+
+function Get-PCHealthScore {
+    param([int64]$RecoverableBytes)
+
+    $oneGb = 1024L * 1024L * 1024L
+    if ($RecoverableBytes -le 0) {
+        return 100
+    }
+
+    $deduction = [Math]::Min(35, [Math]::Ceiling(($RecoverableBytes / $oneGb) * 5))
+    return [int](100 - $deduction)
+}
+
+function Read-CleanupStats {
+    if (Test-Path -Path $StatsFile) {
+        try {
+            return Get-Content -Path $StatsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            Write-Log "WARN: Existing cleanup statistics could not be read. A new stats file will be created."
+        }
+    }
+
+    return [pscustomobject]@{
+        ToolVersion = $ToolVersion
+        LastUpdatedAt = $null
+        LastRunMode = $null
+        LastSessionId = $null
+        LastRecoverableBytes = 0
+        LastRecoveredBytes = 0
+        TotalRecoveredBytes = 0
+        PCHealthScore = 100
+    }
+}
+
+function Write-CleanupStats {
+    param([string]$RunMode)
+
+    if (!$script:CleanupReport) {
+        return
+    }
+
+    $totals = Get-CleanupMetricTotals
+    $existingStats = Read-CleanupStats
+    $previousTotalRecovered = 0L
+    if ($null -ne $existingStats.TotalRecoveredBytes) {
+        $previousTotalRecovered = [int64]$existingStats.TotalRecoveredBytes
+    }
+
+    $recoverableBytes = [int64]$totals.RecoverableBytes
+    $recoveredBytes = [int64]$totals.RecoveredBytes
+    $totalRecoveredBytes = $previousTotalRecovered
+    if ($RunMode -eq "SafeCleanup" -and !$script:EffectiveDryRun -and !$WhatIfPreference) {
+        $totalRecoveredBytes += $recoveredBytes
+    }
+
+    $healthBasisBytes = $recoverableBytes
+    if ($RunMode -eq "SafeCleanup" -and !$script:EffectiveDryRun -and !$WhatIfPreference) {
+        $healthBasisBytes = [Math]::Max(0, $recoverableBytes - $recoveredBytes)
+    }
+    $healthScore = Get-PCHealthScore -RecoverableBytes $healthBasisBytes
+    $stats = [ordered]@{
+        ToolVersion = $ToolVersion
+        LastUpdatedAt = (Get-Date).ToString("o")
+        LastRunMode = $RunMode
+        LastSessionId = $SessionId
+        LastRecoverableBytes = $recoverableBytes
+        LastRecoveredBytes = $recoveredBytes
+        TotalRecoveredBytes = $totalRecoveredBytes
+        PCHealthScore = $healthScore
+    }
+
+    $script:CleanupReport.Statistics = [ordered]@{
+        RecoverableBytes = $recoverableBytes
+        RecoveredBytes = $recoveredBytes
+        TotalRecoveredBytes = $totalRecoveredBytes
+        PCHealthScore = $healthScore
+    }
+
+    $stats | ConvertTo-Json -Depth 4 | Set-Content -Path $StatsFile -Encoding UTF8 -WhatIf:$false
+    Write-Log "Cleanup statistics saved: $StatsFile"
+    Write-Log "Recoverable bytes: $recoverableBytes"
+    Write-Log "Recovered bytes this run: $recoveredBytes"
+    Write-Log "Total recovered bytes: $totalRecoveredBytes"
+    Write-Log "PC health score: $healthScore"
+}
+
 function Write-CleanupJsonReport {
     if (!$script:CleanupReport) {
         return
@@ -159,6 +280,11 @@ function Write-HtmlReport {
     $endTime = Get-Date
     $computerName = $env:COMPUTERNAME
     $userName = $env:USERNAME
+    $statistics = if ($script:CleanupReport) { $script:CleanupReport.Statistics } else { $null }
+    $recoverableBytes = if ($statistics) { $statistics.RecoverableBytes } else { 0 }
+    $recoveredBytes = if ($statistics) { $statistics.RecoveredBytes } else { 0 }
+    $totalRecoveredBytes = if ($statistics) { $statistics.TotalRecoveredBytes } else { 0 }
+    $pcHealthScore = if ($statistics) { $statistics.PCHealthScore } else { 100 }
 
     $html = @"
 <!doctype html>
@@ -189,8 +315,13 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <tr><td><strong>Started</strong></td><td>$($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Ended</strong></td><td>$($endTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Estimated Cleanup Targets</strong></td><td>$EstimatedCleanupTargets</td></tr>
+<tr><td><strong>Recoverable Space</strong></td><td>$recoverableBytes bytes</td></tr>
+<tr><td><strong>Recovered This Run</strong></td><td>$recoveredBytes bytes</td></tr>
+<tr><td><strong>Total Recovered</strong></td><td>$totalRecoveredBytes bytes</td></tr>
+<tr><td><strong>PC Health Score</strong></td><td>$pcHealthScore / 100</td></tr>
 <tr><td><strong>Log File</strong></td><td>$LogFile</td></tr>
 <tr><td><strong>JSON Report</strong></td><td>$JsonReport</td></tr>
+<tr><td><strong>Statistics File</strong></td><td>$StatsFile</td></tr>
 <tr><td><strong>Browser Bookmark Backups</strong></td><td>$BrowserBackupDir</td></tr>
 </table>
 
@@ -243,6 +374,9 @@ function Write-Summary {
     Write-Log "Started: $($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))"
     Write-Log "Ended: $($endTime.ToString('yyyy-MM-dd HH:mm:ss'))"
     Write-Log "Estimated cleanup targets: $EstimatedCleanupTargets"
+    if ($script:CleanupReport) {
+        Write-CleanupStats -RunMode $script:CleanupReport.RunMode
+    }
     Write-CleanupJsonReport
     Write-HtmlReport -LicenseMode $LicenseMode -StartTime $StartTime -EstimatedCleanupTargets $EstimatedCleanupTargets
     Write-Log "HTML report: $HtmlReport"
@@ -655,7 +789,10 @@ function Remove-Contents {
     if (!(Test-Path $Path)) {
         Write-Log "SKIP: $Label not found: $Path"
         Add-ReportSkippedItem -Label $Label -Path $Path -Reason "Path not found"
-        return
+        return [ordered]@{
+            FilesRemoved = 0
+            BytesRemoved = 0
+        }
     }
 
     if ($AddToReport) {
@@ -663,16 +800,29 @@ function Remove-Contents {
     }
 
     Write-Log "Cleaning: $Label - $Path"
+    $before = Measure-CleanupPath -Path $Path
 
     if ($script:EffectiveDryRun) {
         Get-ChildItem -Path $Path -Force -Recurse | Select-Object -First 20 | ForEach-Object {
             Write-Log "DRYRUN: Would remove $($_.FullName)"
         }
-        return
+        return [ordered]@{
+            FilesRemoved = 0
+            BytesRemoved = 0
+        }
     }
 
     if ($PSCmdlet.ShouldProcess($Path, "Remove cleanup contents for $Label")) {
         Get-ChildItem -Path $Path -Force -Recurse | Remove-Item -Force -Recurse
+    }
+
+    $after = Measure-CleanupPath -Path $Path
+    $filesRemoved = [Math]::Max(0, [int64]$before.EstimatedFiles - [int64]$after.EstimatedFiles)
+    $bytesRemoved = [Math]::Max(0, [int64]$before.EstimatedBytes - [int64]$after.EstimatedBytes)
+
+    return [ordered]@{
+        FilesRemoved = $filesRemoved
+        BytesRemoved = $bytesRemoved
     }
 }
 
@@ -1104,12 +1254,17 @@ function Invoke-CleanupCategory {
     foreach ($path in $Category.Paths) {
         if (Test-Path -Path $path) {
             $Category.PathsProcessed += $path
+            $pathEstimate = Measure-CleanupPath -Path $path
+            $Category.EstimatedBytes += [int64]$pathEstimate.EstimatedBytes
+            $Category.EstimatedFiles += [int64]$pathEstimate.EstimatedFiles
         }
         else {
             $Category.PathsSkipped += $path
         }
 
-        Remove-Contents -Path $path -Label $Category.Label -AddToReport $false
+        $cleanupResult = Remove-Contents -Path $path -Label $Category.Label -AddToReport $false
+        $Category.ActualBytesRemoved += [int64]$cleanupResult.BytesRemoved
+        $Category.ActualFilesRemoved += [int64]$cleanupResult.FilesRemoved
     }
 
     if ($Category.PathsProcessed.Count -gt 0 -and $Category.PathsSkipped.Count -gt 0) {

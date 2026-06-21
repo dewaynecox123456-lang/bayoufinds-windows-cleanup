@@ -1,4 +1,4 @@
-BayouFinds Cleanup Assistant v1.3.0 Beta
+BayouFinds Cleanup Assistant v1.3.2 Beta
 ========================================
 
 Customer setup
@@ -23,6 +23,25 @@ Recommended customer flow
 Start with Scan My PC. The scan creates a report without deleting files. After
 the scan completes, review the on-screen results or click Open Latest Report.
 Run Safe Cleanup only after reviewing the scan results.
+
+Dashboard metrics
+-----------------
+
+- Recoverable Space
+  Space found during Scan My PC. Preview mode does not delete files.
+
+- Recovered This Run
+  Space cleaned during the current Safe Cleanup run.
+
+- Total Recovered
+  Total space recovered across completed Safe Cleanup runs.
+
+- PC Health Score
+  A simple 0-100 score based on safe cleanup findings. Higher is better.
+
+Dashboard statistics are saved in:
+
+  Desktop\BayouFinds_Cleanup_Logs\cleanup_stats.json
 
 Safety guardrails
 -----------------
@@ -84,7 +103,8 @@ Reports and logs are saved here:
 
   Desktop\BayouFinds_Cleanup_Logs
 
-Each scan or cleanup run creates an HTML report, JSON report, and log file.
+Each scan or cleanup run creates an HTML report, JSON report, and log file. The
+dashboard totals are stored in cleanup_stats.json in the same folder.
 
 Developer source launch
 -----------------------

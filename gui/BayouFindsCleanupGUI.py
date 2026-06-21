@@ -1,4 +1,4 @@
-"""BayouFinds Windows Cleanup v1.3.0 Tkinter GUI."""
+"""BayouFinds Windows Cleanup v1.3.2 Tkinter GUI."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ except ImportError:
 
 
 APP_NAME = "BayouFinds Cleanup Assistant"
-APP_VERSION = "v1.3.0"
+APP_VERSION = "v1.3.2"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION} Beta"
 WINDOW_SIZE = "940x620"
 WINDOW_WIDTH = 940
@@ -178,6 +178,8 @@ class BayouFindsCleanupGUI:
         self.current_process: subprocess.Popen[str] | None = None
         self.current_action_name: str | None = None
         self.last_license_mode: str | None = None
+        self.run_output_lines: list[str] = []
+        self.run_started_at: float | None = None
         self.images: list[PhotoImage] = []
 
         self._configure_styles()
@@ -396,6 +398,10 @@ class BayouFindsCleanupGUI:
 
         self.license_value_label = self._add_dashboard_row(dashboard, "License", "Not checked")
         self.last_scan_value_label = self._add_dashboard_row(dashboard, "Last Scan", "Not run yet")
+        self.recoverable_value_label = self._add_dashboard_row(dashboard, "Recoverable Space", "0 B")
+        self.recovered_run_value_label = self._add_dashboard_row(dashboard, "Recovered This Run", "0 B")
+        self.total_recovered_value_label = self._add_dashboard_row(dashboard, "Total Recovered", "0 B")
+        self.health_score_value_label = self._add_dashboard_row(dashboard, "PC Health Score", "100")
         self.recommendation_value_label = self._add_dashboard_row(
             dashboard,
             "Recommendation",
@@ -438,7 +444,7 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nAfter the scan, review the results here or open the latest report. Use Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds protects your Documents, Pictures, Desktop, Videos, Music, and Downloads by default.\nRegistry cleaning and driver cleanup are not included.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
+            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nAfter the scan, this panel shows a cleanup breakdown with recoverable space, recovered space, total recovered, and PC health score. Use Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds protects your Documents, Pictures, Desktop, Videos, Music, and Downloads by default.\nRegistry cleaning and driver cleanup are not included.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
         )
         self.output.configure(state="disabled")
 
@@ -449,7 +455,7 @@ class BayouFindsCleanupGUI:
             row,
             text=f"{label}:",
             style="DashboardTitle.TLabel",
-            width=15,
+            width=20,
         ).pack(side=LEFT)
         value_label = ttk.Label(
             row,
@@ -569,9 +575,12 @@ class BayouFindsCleanupGUI:
 
         self._set_running(True)
         self.current_action_name = action_name
+        self.run_output_lines = []
+        self.run_started_at = datetime.now().timestamp()
         self._update_dashboard_for_start(action_name)
         self._clear_output()
-        self._append_output(f"Starting {action_name}...\n")
+        self._append_output(f"{action_name} is running...\n\n")
+        self._append_output("This panel will show a cleanup breakdown when the task finishes.\n")
         self._append_output(f"Reports folder: {self.log_folder}\n\n")
 
         self.worker_thread = threading.Thread(
@@ -650,7 +659,7 @@ class BayouFindsCleanupGUI:
                 event, payload = self.output_queue.get_nowait()
                 if event == "line":
                     line = str(payload)
-                    self._append_output(line)
+                    self.run_output_lines.append(line)
                     self._capture_license_mode(line)
                 elif event == "done":
                     self._handle_done(int(payload or 0))
@@ -660,11 +669,11 @@ class BayouFindsCleanupGUI:
         self.root.after(100, self._poll_output_queue)
 
     def _handle_done(self, exit_code: int) -> None:
-        self._append_output(f"\nFinished with exit code {exit_code}.\n")
-        self._append_output(f"Reports and logs are saved here:\n{self.log_folder}\n")
         action_name = self.current_action_name
         self.current_action_name = None
         self._set_running(False)
+        self._show_structured_breakdown(action_name, exit_code)
+        self.run_started_at = None
         self._update_dashboard_for_done(action_name, exit_code)
 
         if exit_code == 0:
@@ -692,8 +701,11 @@ class BayouFindsCleanupGUI:
     def _update_dashboard_for_start(self, action_name: str) -> None:
         if action_name == "Scan My PC":
             self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
+            self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
+            self._set_dashboard_value(self.recovered_run_value_label, "0 B", MUTED)
             self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
         elif action_name == "Run Safe Cleanup":
+            self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
             self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
         elif action_name == "License Status":
             self._set_dashboard_value(self.license_value_label, "Checking", ACCENT)
@@ -722,6 +734,125 @@ class BayouFindsCleanupGUI:
                 self._set_dashboard_value(self.license_value_label, "Valid", SUCCESS)
             else:
                 self._set_dashboard_value(self.license_value_label, "Needs attention", ERROR)
+
+    def _show_structured_breakdown(self, action_name: str | None, exit_code: int) -> None:
+        report = self._load_latest_json_report()
+        stats = self._load_cleanup_stats()
+        self._clear_output()
+
+        if report:
+            self._update_metrics_from_report(report, stats)
+            self._append_output(self._format_cleanup_breakdown(report, action_name, exit_code))
+            return
+
+        self._append_output(f"{action_name or 'Task'} finished with exit code {exit_code}.\n\n")
+        self._append_output("A structured report was not found yet. Open the reports folder to review the log.\n\n")
+        if self.run_output_lines:
+            self._append_output("Recent messages:\n")
+            for line in self.run_output_lines[-12:]:
+                self._append_output(f"- {line.strip()}\n")
+
+    def _load_latest_json_report(self) -> dict | None:
+        report_path = self._find_latest_json_report(min_mtime=self.run_started_at)
+        if not report_path:
+            return None
+        return self._load_json_file(report_path)
+
+    def _load_cleanup_stats(self) -> dict | None:
+        stats_path = self.log_folder / "cleanup_stats.json"
+        if not stats_path.exists():
+            return None
+        return self._load_json_file(stats_path)
+
+    def _load_json_file(self, path: Path) -> dict | None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _update_metrics_from_report(self, report: dict, stats: dict | None) -> None:
+        statistics = report.get("Statistics") or {}
+        recoverable = int(statistics.get("RecoverableBytes") or 0)
+        recovered = int(statistics.get("RecoveredBytes") or 0)
+        total_recovered = int(statistics.get("TotalRecoveredBytes") or 0)
+        health_score = int(statistics.get("PCHealthScore") or 100)
+
+        if stats:
+            total_recovered = int(stats.get("TotalRecoveredBytes") or total_recovered)
+            health_score = int(stats.get("PCHealthScore") or health_score)
+
+        self._set_dashboard_value(self.recoverable_value_label, self._format_bytes(recoverable), TEXT)
+        self._set_dashboard_value(self.recovered_run_value_label, self._format_bytes(recovered), SUCCESS)
+        self._set_dashboard_value(self.total_recovered_value_label, self._format_bytes(total_recovered), SUCCESS)
+        self._set_dashboard_value(self.health_score_value_label, f"{health_score}/100", self._health_color(health_score))
+
+    def _format_cleanup_breakdown(self, report: dict, action_name: str | None, exit_code: int) -> str:
+        statistics = report.get("Statistics") or {}
+        categories = report.get("CleanupCategories") or []
+        run_mode = report.get("RunMode") or action_name or "Cleanup"
+        lines = [
+            f"{run_mode} finished with exit code {exit_code}.",
+            "",
+            "Dashboard metrics",
+            f"Recoverable Space: {self._format_bytes(int(statistics.get('RecoverableBytes') or 0))}",
+            f"Recovered This Run: {self._format_bytes(int(statistics.get('RecoveredBytes') or 0))}",
+            f"Total Recovered: {self._format_bytes(int(statistics.get('TotalRecoveredBytes') or 0))}",
+            f"PC Health Score: {int(statistics.get('PCHealthScore') or 100)}/100",
+            "",
+            "Cleanup breakdown",
+        ]
+
+        visible_categories = [
+            category for category in categories
+            if isinstance(category, dict) and category.get("Label")
+        ]
+        if not visible_categories:
+            lines.append("- No cleanup categories were reported.")
+        else:
+            for category in visible_categories:
+                label = category.get("Label", "Category")
+                status = category.get("Status") or "Reported"
+                estimated = self._format_bytes(int(category.get("EstimatedBytes") or 0))
+                recovered = self._format_bytes(int(category.get("ActualBytesRemoved") or 0))
+                reason = category.get("SkippedReason")
+                if reason:
+                    lines.append(f"- {label}: {status} ({reason})")
+                elif run_mode == "Preview":
+                    lines.append(f"- {label}: {status}, {estimated} recoverable")
+                else:
+                    lines.append(f"- {label}: {status}, {recovered} recovered")
+
+        paths = report.get("Paths") or {}
+        lines.extend([
+            "",
+            "Safety",
+            "Personal folders are protected by default. Registry cleaning and driver cleanup are not included.",
+            "",
+            f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+            f"Stats: {paths.get('StatsFile') or str(self.log_folder / 'cleanup_stats.json')}",
+            "",
+        ])
+        return "\n".join(lines)
+
+    def _format_bytes(self, value: int) -> str:
+        units = ["B", "KB", "MB", "GB", "TB"]
+        amount = float(max(value, 0))
+        unit_index = 0
+        while amount >= 1024 and unit_index < len(units) - 1:
+            amount /= 1024
+            unit_index += 1
+
+        if unit_index == 0:
+            return f"{int(amount)} {units[unit_index]}"
+        return f"{amount:.1f} {units[unit_index]}"
+
+    def _health_color(self, score: int) -> str:
+        if score >= 85:
+            return SUCCESS
+        if score >= 70:
+            return WARNING
+        return ERROR
 
     def _capture_license_mode(self, line: str) -> None:
         marker = "license mode:"
@@ -774,6 +905,20 @@ class BayouFindsCleanupGUI:
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
+        return reports[0] if reports else None
+
+    def _find_latest_json_report(self, min_mtime: float | None = None) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        reports = []
+        for path in self.log_folder.glob("cleanup_report_*.json"):
+            modified_at = path.stat().st_mtime
+            if min_mtime is not None and modified_at < min_mtime - 2:
+                continue
+            reports.append(path)
+
+        reports.sort(key=lambda path: path.stat().st_mtime, reverse=True)
         return reports[0] if reports else None
 
     def show_about(self) -> None:
