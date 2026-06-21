@@ -28,12 +28,12 @@ APP_NAME = "BayouFinds Cleanup Assistant"
 APP_VERSION = "v1.5.0"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
 PURCHASE_URL = "https://bayoufinds.com/b/y3OJr"
-WINDOW_SIZE = "940x620"
-WINDOW_WIDTH = 940
-WINDOW_HEIGHT = 620
+WINDOW_SIZE = "1040x700"
+WINDOW_WIDTH = 1040
+WINDOW_HEIGHT = 700
 CONTENT_PADDING = 18
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
-HEADER_IMAGE_MAX_HEIGHT = 58
+HEADER_IMAGE_MAX_HEIGHT = 40
 MASCOT_IMAGE_MAX_WIDTH = 170
 MASCOT_IMAGE_MAX_HEIGHT = 170
 SPLASH_WIDTH = 620
@@ -41,20 +41,21 @@ SPLASH_HEIGHT = 360
 SPLASH_IMAGE_MAX_WIDTH = 584
 SPLASH_IMAGE_MAX_HEIGHT = 292
 
-BG = "#10242a"
-PANEL = "#183039"
-PANEL_ALT = "#213d46"
-PANEL_SOFT = "#1f3a43"
-CARD = "#244650"
-TEXT = "#f5f8f7"
-MUTED = "#b8c9c7"
-ACCENT = "#39a9c7"
-ACCENT_DARK = "#2388a3"
-PRIMARY = "#69c7a5"
-PRIMARY_DARK = "#4ba985"
-SUCCESS = "#7bd88f"
-WARNING = "#f4c76b"
-ERROR = "#ff7a7a"
+BG = "#f5f2eb"
+SIDEBAR = "#0f3033"
+PANEL = "#fbfaf6"
+PANEL_ALT = "#e8f1ee"
+PANEL_SOFT = "#eef5f1"
+CARD = "#ffffff"
+TEXT = "#173034"
+MUTED = "#637a78"
+ACCENT = "#56b8bd"
+ACCENT_DARK = "#2f8e95"
+PRIMARY = "#76c8a2"
+PRIMARY_DARK = "#57aa84"
+SUCCESS = "#4f9f72"
+WARNING = "#c49a3a"
+ERROR = "#c86464"
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -241,12 +242,15 @@ class BayouFindsCleanupGUI:
         style.theme_use("clam")
         style.configure("TFrame", background=BG)
         style.configure("Panel.TFrame", background=PANEL)
+        style.configure("Sidebar.TFrame", background=SIDEBAR)
         style.configure("SoftPanel.TFrame", background=PANEL_SOFT)
         style.configure("Card.TFrame", background=CARD)
         style.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
-        style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 22, "bold"))
+        style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 24, "bold"))
         style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 11))
+        style.configure("SidebarTitle.TLabel", background=SIDEBAR, foreground="#fff7e8", font=("Segoe UI", 15, "bold"))
+        style.configure("SidebarMuted.TLabel", background=SIDEBAR, foreground="#b7d6d1", font=("Segoe UI", 9))
         style.configure(
             "CardTitle.TLabel",
             background=CARD,
@@ -257,11 +261,11 @@ class BayouFindsCleanupGUI:
             "CardValue.TLabel",
             background=CARD,
             foreground=TEXT,
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 18, "bold"),
         )
         style.configure(
             "Banner.TLabel",
-            background=CARD,
+            background=PANEL_ALT,
             foreground=TEXT,
             font=("Segoe UI", 13, "bold"),
             padding=(12, 10),
@@ -281,7 +285,7 @@ class BayouFindsCleanupGUI:
         style.configure(
             "Primary.TButton",
             background=PRIMARY,
-            foreground="#09231e",
+            foreground="#0b2727",
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 12, "bold"),
@@ -315,7 +319,18 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 10),
             padding=(14, 10),
         )
-        style.map("Secondary.TButton", background=[("active", "#284154")])
+        style.map("Secondary.TButton", background=[("active", "#d8e8e3")])
+        style.configure(
+            "Sidebar.TButton",
+            background=SIDEBAR,
+            foreground="#f8f1e5",
+            borderwidth=0,
+            focusthickness=0,
+            font=("Segoe UI", 10, "bold"),
+            padding=(14, 10),
+            anchor="w",
+        )
+        style.map("Sidebar.TButton", background=[("active", "#19484b"), ("disabled", "#0f3033")])
 
     def _set_icon(self) -> None:
         icon_path = self._asset_path("app_icon.ico")
@@ -347,56 +362,30 @@ class BayouFindsCleanupGUI:
         menu.destroy()
 
     def _build_layout(self) -> None:
-        outer = ttk.Frame(self.root, padding=18)
+        outer = ttk.Frame(self.root)
         outer.pack(fill=BOTH, expand=True)
 
-        header = ttk.Frame(outer)
-        header.pack(fill=X)
+        sidebar = ttk.Frame(outer, style="Sidebar.TFrame", padding=18)
+        sidebar.pack(side=LEFT, fill=Y)
+        sidebar.configure(width=210)
+        sidebar.pack_propagate(False)
 
-        header_image = self._load_image_fit(
-            "header_banner.png",
-            HEADER_IMAGE_MAX_WIDTH,
-            HEADER_IMAGE_MAX_HEIGHT,
-            allow_upscale=True,
-        )
-        if header_image:
-            ttk.Label(header, image=header_image, background=BG).pack(anchor="center", fill=X)
-        else:
-            ttk.Label(header, text="BayouFinds", style="Header.TLabel").pack(anchor="w")
-            ttk.Label(
-                header,
-                text="Scan first, review results, then run safe cleanup",
-                style="Subheader.TLabel",
-            ).pack(anchor="w", pady=(2, 0))
+        ttk.Label(sidebar, text="BayouFinds", style="SidebarTitle.TLabel").pack(anchor="w")
+        ttk.Label(sidebar, text="Cleanup Assistant", style="SidebarMuted.TLabel").pack(anchor="w", pady=(2, 18))
 
-        ttk.Label(header, text=WINDOW_TITLE, style="Muted.TLabel").pack(anchor="w", pady=(6, 0))
+        for label, command in [
+            ("Home", lambda: self._set_view("Home")),
+            ("Scan", self.scan_my_pc),
+            ("Cleanup", self.quick_cleanup),
+            ("Reports", self.open_latest_report),
+            ("License", self.license_status),
+            ("Help", self.show_about),
+        ]:
+            self._add_sidebar_button(sidebar, label, command)
 
-        body = ttk.Frame(outer)
-        body.pack(fill=BOTH, expand=True, pady=(14, 0))
+        ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill=BOTH, expand=True)
 
-        controls = ttk.Frame(body, style="Panel.TFrame", padding=14)
-        controls.pack(side=LEFT, fill=Y)
-        controls.configure(width=285)
-        controls.pack_propagate(False)
-
-        ttk.Label(
-            controls,
-            text="Home PC care",
-            background=PANEL,
-            foreground=TEXT,
-            font=("Segoe UI", 13, "bold"),
-        ).pack(anchor="w")
-        ttk.Label(
-            controls,
-            text="Scan first. Nothing is deleted until you choose cleanup.",
-            background=PANEL,
-            foreground=MUTED,
-            font=("Segoe UI", 9),
-            wraplength=250,
-            justify="left",
-        ).pack(anchor="w", pady=(4, 12))
-
-        license_panel = ttk.Frame(controls, style="SoftPanel.TFrame", padding=10)
+        license_panel = ttk.Frame(sidebar, style="SoftPanel.TFrame", padding=10)
         license_panel.pack(fill=X, pady=(0, 12))
         ttk.Label(
             license_panel,
@@ -415,120 +404,161 @@ class BayouFindsCleanupGUI:
         self.license_value_label.pack(anchor="w", pady=(2, 0))
         ttk.Label(
             license_panel,
-            text="Trial mode: scan and reports only",
+            text="Trial: scan and reports only",
             background=PANEL_SOFT,
             foreground=MUTED,
             font=("Segoe UI", 8),
         ).pack(anchor="w", pady=(2, 0))
 
-        self._add_action_button(controls, "Import License", self.import_license)
-        self._add_secondary_button(controls, "Purchase License", self.purchase_license)
-        self._add_primary_button(controls, "Scan My PC", self.scan_my_pc)
-        self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
-        self._add_secondary_button(controls, "Open Latest Report", self.open_latest_report)
-        self._add_secondary_button(controls, "Open Reports / Logs", self.open_log_folder)
+        self._add_sidebar_button(sidebar, "Purchase License", self.purchase_license)
+        self._add_sidebar_button(sidebar, "Import License", self.import_license)
 
-        protected = ttk.Frame(controls, style="SoftPanel.TFrame", padding=10)
-        protected.pack(fill=X, pady=(10, 0))
+        main = ttk.Frame(outer, padding=22)
+        main.pack(side=RIGHT, fill=BOTH, expand=True)
+
+        header = ttk.Frame(main)
+        header.pack(fill=X)
+
+        header_text = ttk.Frame(header)
+        header_text.pack(side=LEFT, fill=X, expand=True)
+        self.view_title_label = ttk.Label(header_text, text="Home", style="Header.TLabel")
+        self.view_title_label.pack(anchor="w")
+        self.view_subtitle_label = ttk.Label(
+            header_text,
+            text="A calm, scan-first way to care for your PC.",
+            style="Subheader.TLabel",
+        )
+        self.view_subtitle_label.pack(anchor="w", pady=(2, 0))
+
+        header_image = self._load_image_fit(
+            "header_banner.png",
+            180,
+            HEADER_IMAGE_MAX_HEIGHT,
+            allow_upscale=False,
+        )
+        if header_image:
+            ttk.Label(header, image=header_image, background=BG).pack(side=RIGHT, padx=(16, 0))
+
+        dashboard = ttk.Frame(main)
+        dashboard.pack(fill=X, pady=(18, 14))
+
+        self.recoverable_value_label = self._add_metric_card(dashboard, "Recoverable Space", "Not scanned yet", 0, 0)
+        self.recovered_run_value_label = self._add_metric_card(dashboard, "Recovered This Run", "Not run yet", 0, 1)
+        self.total_recovered_value_label = self._add_metric_card(dashboard, "Total Recovered", "No cleanup yet", 0, 2)
+        self.health_score_value_label = self._add_metric_card(dashboard, "PC Health", "Not scanned yet", 0, 3)
+        for column in range(4):
+            dashboard.columnconfigure(column, weight=1)
+
+        action_row = ttk.Frame(main)
+        action_row.pack(fill=X, pady=(0, 14))
+        self._add_primary_button(action_row, "Scan My PC", self.scan_my_pc)
+        self._add_action_button(action_row, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
+        self._add_secondary_button(action_row, "Purchase License", self.purchase_license)
+        self._add_secondary_button(action_row, "Import License", self.import_license)
+
+        trust_row = ttk.Frame(main)
+        trust_row.pack(fill=X, pady=(0, 14))
+
+        protected = ttk.Frame(trust_row, style="Card.TFrame", padding=14)
+        protected.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
         ttk.Label(
             protected,
             text="Protected by Default",
-            background=PANEL_SOFT,
+            background=CARD,
             foreground=SUCCESS,
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w")
         ttk.Label(
             protected,
-            text="Documents  Pictures  Downloads\nDesktop  Videos  Music",
-            background=PANEL_SOFT,
+            text="Documents  •  Pictures  •  Downloads\nDesktop  •  Videos  •  Music\nBrowser passwords",
+            background=CARD,
             foreground=TEXT,
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 10),
             justify="left",
-        ).pack(anchor="w", pady=(4, 0))
+        ).pack(anchor="w", pady=(8, 0))
 
-        ttk.Separator(controls).pack(fill=X, pady=10)
+        guardrails = ttk.Frame(trust_row, style="Card.TFrame", padding=14)
+        guardrails.pack(side=RIGHT, fill=BOTH, expand=True, padx=(8, 0))
         ttk.Label(
-            controls,
-            text="More tools",
-            background=PANEL,
+            guardrails,
+            text="Safe Cleanup Rules",
+            background=CARD,
+            foreground=TEXT,
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            guardrails,
+            text="No registry cleaning\nNo driver cleanup\nApps are skipped while running",
+            background=CARD,
             foreground=MUTED,
-            font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w", pady=(0, 4))
-        self._add_secondary_button(controls, "License Status", self.license_status)
-        self._add_secondary_button(controls, "Deep Windows Check", self.deep_cleanup, requires_license=True)
-        self._add_secondary_button(controls, "Repair Windows Files", self.repair_windows_files, requires_license=True)
-        self._add_secondary_button(controls, "About", self.show_about)
-        self._add_secondary_button(controls, "Exit", self.root.destroy)
-
-        output_panel = ttk.Frame(body, style="Panel.TFrame", padding=14)
-        output_panel.pack(side=RIGHT, fill=BOTH, expand=True, padx=(16, 0))
-
-        dashboard = ttk.Frame(output_panel, style="Panel.TFrame")
-        dashboard.pack(fill=X, pady=(0, 12))
-
-        self.recoverable_value_label = self._add_metric_card(dashboard, "Recoverable Space", "0 B", 0, 0)
-        self.recovered_run_value_label = self._add_metric_card(dashboard, "Recovered This Run", "0 B", 0, 1)
-        self.total_recovered_value_label = self._add_metric_card(dashboard, "Total Recovered", "0 B", 1, 0)
-        self.health_score_value_label = self._add_metric_card(dashboard, "PC Health Score", "100/100", 1, 1)
-        dashboard.columnconfigure(0, weight=1)
-        dashboard.columnconfigure(1, weight=1)
+            font=("Segoe UI", 10),
+            justify="left",
+        ).pack(anchor="w", pady=(8, 0))
 
         self.last_scan_value_label = ttk.Label(
-            output_panel,
+            main,
             text="Last Scan: Not run yet",
-            background=PANEL,
+            background=BG,
             foreground=MUTED,
             font=("Segoe UI", 9),
         )
         self.last_scan_value_label.pack(anchor="w", pady=(0, 2))
         self.recommendation_value_label = ttk.Label(
-            output_panel,
+            main,
             text="Recommendation: Start with Scan My PC",
-            background=PANEL,
+            background=BG,
             foreground=TEXT,
             font=("Segoe UI", 9, "bold"),
         )
         self.recommendation_value_label.pack(anchor="w", pady=(0, 10))
 
         self.result_banner_label = ttk.Label(
-            output_panel,
+            main,
             text="Ready — Start with Scan My PC",
             style="Banner.TLabel",
         )
         self.result_banner_label.pack(fill=X, pady=(0, 10))
 
-        ttk.Label(
-            output_panel,
-            text="Scan Results",
-            background=PANEL,
-            foreground=TEXT,
-            font=("Segoe UI", 12, "bold"),
-        ).pack(anchor="w")
+        results_header = ttk.Frame(main)
+        results_header.pack(fill=X)
+        ttk.Label(results_header, text="Results Summary", style="Subheader.TLabel").pack(side=LEFT)
+        ttk.Button(
+            results_header,
+            text="Open Reports / Logs",
+            style="Secondary.TButton",
+            command=self.open_log_folder,
+        ).pack(side=RIGHT, padx=(8, 0))
+        ttk.Button(
+            results_header,
+            text="View Technical Details",
+            style="Secondary.TButton",
+            command=self.view_technical_details,
+        ).pack(side=RIGHT)
 
         self.status_label = ttk.Label(
-            output_panel,
+            main,
             text="Ready",
-            background=PANEL,
+            background=BG,
             foreground=MUTED,
             font=("Segoe UI", 10),
         )
         self.status_label.pack(anchor="w", pady=(4, 10))
 
         self.output = scrolledtext.ScrolledText(
-            output_panel,
-            bg="#071019",
-            fg="#e7edf4",
+            main,
+            bg=CARD,
+            fg=TEXT,
             insertbackground=TEXT,
-            selectbackground=ACCENT_DARK,
+            selectbackground=PANEL_ALT,
             relief="flat",
             wrap="word",
             font=("Segoe UI", 10),
-            height=18,
+            height=10,
         )
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nYour raw technical logs stay available behind Open Reports / Logs. This screen keeps the results simple.\n\nProtected by default: Documents, Pictures, Downloads, Desktop, Videos, and Music.\nRegistry cleaning and driver cleanup are not included.\n\n",
+            "Start with Scan My PC.\n\nThe scan creates a clear report and does not delete files. Cleanup stays locked until an active license is installed.\n\nRaw technical logs stay behind Open Reports / Logs or View Technical Details.\n",
         )
         self.output.configure(state="disabled")
 
@@ -539,6 +569,32 @@ class BayouFindsCleanupGUI:
         value_label = ttk.Label(card, text=value, style="CardValue.TLabel")
         value_label.pack(anchor="w", pady=(4, 0))
         return value_label
+
+    def _add_sidebar_button(self, parent: ttk.Frame, label: str, command) -> None:
+        ttk.Button(parent, text=label, style="Sidebar.TButton", command=command).pack(fill=X, pady=3)
+
+    def _set_view(self, view_name: str) -> None:
+        subtitles = {
+            "Home": "A calm, scan-first way to care for your PC.",
+            "Reports": "Open reports, logs, and technical details when you need them.",
+            "License": "Activate cleanup when you are ready to recover space.",
+            "Help": "Safety-first cleanup with personal files protected.",
+        }
+        self.view_title_label.configure(text=view_name)
+        self.view_subtitle_label.configure(text=subtitles.get(view_name, "Scan first, then choose cleanup."))
+
+        if view_name == "Reports":
+            self._set_result_banner("Reports — Open Latest Report or Technical Details", TEXT)
+            self._clear_output()
+            self._append_output("Reports are saved on your Desktop in BayouFinds_Cleanup_Logs.\n\nUse Open Reports / Logs for raw technical logs, or Open Latest Report for the customer report.\n")
+        elif view_name == "License":
+            self.refresh_license_state()
+            self._clear_output()
+            self._append_output("License options\n\nTrial mode includes Scan My PC and reports. Active licenses unlock Safe Cleanup and recovery tracking.\n\nUse Purchase License or Import License from the sidebar.\n")
+        elif view_name == "Help":
+            self._set_result_banner("Protected by Default", SUCCESS)
+            self._clear_output()
+            self._append_output("Protected by Default\n\nDocuments, Pictures, Downloads, Desktop, Videos, Music, and browser passwords are not cleaned by default.\n\nBayouFinds does not include registry cleaning or driver cleanup.\n")
 
     def _add_dashboard_row(self, parent: ttk.Frame, label: str, value: str) -> ttk.Label:
         row = ttk.Frame(parent, style="SoftPanel.TFrame")
@@ -591,7 +647,7 @@ class BayouFindsCleanupGUI:
             self._set_result_banner("License Active — Cleanup enabled", SUCCESS)
             self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Scan, then run cleanup", TEXT)
         elif state == "trial":
-            self._set_dashboard_value(self.license_value_label, "🟡 Trial", WARNING)
+            self._set_dashboard_value(self.license_value_label, "🟡 Trial Mode", WARNING)
             self._set_result_banner("Trial Mode — Scan and reports enabled", WARNING)
             self._set_dashboard_value(
                 self.recommendation_value_label,
@@ -952,7 +1008,7 @@ class BayouFindsCleanupGUI:
         if action_name == "Scan My PC":
             self._set_dashboard_value(self.last_scan_value_label, "Last Scan: Running now", ACCENT)
             self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
-            self._set_dashboard_value(self.recovered_run_value_label, "0 B", MUTED)
+            self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
             self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Wait for scan results", TEXT)
         elif action_name == "Run Safe Cleanup":
             self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
@@ -984,7 +1040,7 @@ class BayouFindsCleanupGUI:
                 self._set_dashboard_value(self.license_value_label, "🟢 Active", SUCCESS)
                 self.license_state = "active"
             elif exit_code == 0 and self.last_license_mode == "trial":
-                self._set_dashboard_value(self.license_value_label, "🟡 Trial", WARNING)
+                self._set_dashboard_value(self.license_value_label, "🟡 Trial Mode", WARNING)
                 self.license_state = "trial"
             else:
                 self._set_dashboard_value(self.license_value_label, "🔴 License Required", ERROR)
@@ -1103,7 +1159,7 @@ class BayouFindsCleanupGUI:
         lines.extend([
             "",
             "Protected by Default",
-            "Documents, Pictures, Downloads, Desktop, Videos, and Music are not cleaned by default.",
+            "Documents, Pictures, Downloads, Desktop, Videos, Music, and browser passwords are not cleaned by default.",
             "",
             "Safety",
             "Personal folders are protected by default. Registry cleaning and driver cleanup are not included.",
@@ -1252,6 +1308,17 @@ class BayouFindsCleanupGUI:
         else:
             webbrowser.open(latest_report.as_uri())
 
+    def view_technical_details(self) -> None:
+        latest_log = self._find_latest_log()
+        if not latest_log:
+            self.open_log_folder()
+            return
+
+        if os.name == "nt":
+            os.startfile(latest_log)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(latest_log.as_uri())
+
     def _find_latest_report(self) -> Path | None:
         if not self.log_folder.exists():
             return None
@@ -1262,6 +1329,17 @@ class BayouFindsCleanupGUI:
             reverse=True,
         )
         return reports[0] if reports else None
+
+    def _find_latest_log(self) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        logs = sorted(
+            self.log_folder.glob("cleanup_*.log"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        return logs[0] if logs else None
 
     def _find_latest_json_report(self, min_mtime: float | None = None) -> Path | None:
         if not self.log_folder.exists():

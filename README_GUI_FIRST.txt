@@ -18,6 +18,28 @@ Customer setup
    license.json.
 6. If you need a license, click Purchase License.
 
+Premium dashboard
+-----------------
+
+BayouFinds opens to a home dashboard with a Mac-style left sidebar:
+
+- Home
+- Scan
+- Cleanup
+- Reports
+- License
+- Help
+
+The home dashboard shows large, simple cards for:
+
+- Recoverable Space
+- Recovered This Run
+- Total Recovered
+- PC Health
+
+Before the first scan, the cards use friendly placeholders such as Not scanned
+yet, Not run yet, and No cleanup yet.
+
 Trial mode
 ----------
 
@@ -118,6 +140,7 @@ The on-screen breakdown groups cleanup results into simple customer categories:
 - Total
 
 Raw technical logs are still available from Open Reports / Logs.
+View Technical Details opens the latest technical log when one is available.
 
 License dashboard
 -----------------
@@ -143,6 +166,7 @@ Protected by default:
 - Desktop files are not deleted by default.
 - Videos are not deleted by default.
 - Music is not deleted by default.
+- Browser passwords are not deleted by default.
 - Registry cleaning is not included.
 - Driver cleanup is not included.
 
@@ -186,8 +210,11 @@ Buttons
 - Open Latest Report
   Opens the newest HTML report from the reports folder.
 
-- Open Reports Folder
+- Open Reports / Logs
   Opens Desktop\BayouFinds_Cleanup_Logs.
+
+- View Technical Details
+  Opens the latest raw technical log. This is separate from the main dashboard.
 
 - Exit
   Closes the app.
