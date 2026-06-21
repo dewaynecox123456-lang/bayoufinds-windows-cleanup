@@ -13,7 +13,7 @@ import webbrowser
 from datetime import datetime
 from math import ceil
 from pathlib import Path
-from tkinter import Frame, PhotoImage, Tk, Toplevel, filedialog, messagebox
+from tkinter import Canvas, Frame, PhotoImage, Tk, Toplevel, filedialog, messagebox
 from tkinter import BOTH, END, LEFT, RIGHT, X, Y
 from tkinter import scrolledtext, ttk
 
@@ -61,6 +61,228 @@ PRIMARY_DARK = "#4bbf7c"
 SUCCESS = "#7ee7a6"
 WARNING = "#f1c96b"
 ERROR = "#ff7c7c"
+
+
+def draw_round_rect(canvas: Canvas, x1: int, y1: int, x2: int, y2: int, radius: int, **kwargs) -> int:
+    radius = min(radius, max(1, (x2 - x1) // 2), max(1, (y2 - y1) // 2))
+    points = [
+        x1 + radius,
+        y1,
+        x2 - radius,
+        y1,
+        x2,
+        y1,
+        x2,
+        y1 + radius,
+        x2,
+        y2 - radius,
+        x2,
+        y2,
+        x2 - radius,
+        y2,
+        x1 + radius,
+        y2,
+        x1,
+        y2,
+        x1,
+        y2 - radius,
+        x1,
+        y1 + radius,
+        x1,
+        y1,
+    ]
+    return canvas.create_polygon(points, smooth=True, splinesteps=20, **kwargs)
+
+
+class GlassCard(Frame):
+    def __init__(
+        self,
+        parent,
+        fill: str = CARD,
+        border: str = CARD_BORDER,
+        bg: str = BG,
+        shadow: str = SHADOW,
+        glow: bool = False,
+        radius: int = 22,
+        padding: int = 16,
+        min_width: int = 120,
+        min_height: int = 90,
+    ) -> None:
+        super().__init__(parent, bg=bg)
+        self.fill = fill
+        self.border = CARD_HIGHLIGHT if glow else border
+        self.bg = bg
+        self.shadow = GLOW if glow else shadow
+        self.radius = radius
+        self.padding = padding
+        self.canvas = Canvas(
+            self,
+            bg=bg,
+            bd=0,
+            highlightthickness=0,
+            width=min_width,
+            height=min_height,
+        )
+        self.canvas.pack(fill=BOTH, expand=True)
+        self.inner = Frame(self.canvas, bg=fill)
+        self.window_id = self.canvas.create_window(
+            padding + 5,
+            padding + 4,
+            anchor="nw",
+            window=self.inner,
+        )
+        self.canvas.bind("<Configure>", self._draw)
+
+    def _draw(self, event) -> None:
+        width = max(event.width, 20)
+        height = max(event.height, 20)
+        self.canvas.delete("shape")
+        draw_round_rect(
+            self.canvas,
+            7,
+            9,
+            width - 2,
+            height - 2,
+            self.radius,
+            fill=self.shadow,
+            outline="",
+            tags="shape",
+        )
+        draw_round_rect(
+            self.canvas,
+            1,
+            1,
+            width - 8,
+            height - 8,
+            self.radius,
+            fill=self.fill,
+            outline=self.border,
+            width=1,
+            tags="shape",
+        )
+        draw_round_rect(
+            self.canvas,
+            6,
+            5,
+            width - 16,
+            max(10, height // 3),
+            max(10, self.radius - 8),
+            fill="#1b4e52",
+            outline="",
+            tags="shape",
+        )
+        self.canvas.tag_lower("shape")
+        self.canvas.coords(self.window_id, self.padding + 5, self.padding + 4)
+        self.canvas.itemconfigure(
+            self.window_id,
+            width=max(20, width - (self.padding * 2) - 16),
+            height=max(20, height - (self.padding * 2) - 14),
+        )
+
+
+class GlassButton(Frame):
+    def __init__(
+        self,
+        parent,
+        text: str,
+        command=None,
+        width: int = 170,
+        height: int = 44,
+        fill: str = "#173f44",
+        active_fill: str = "#22595e",
+        foreground: str = TEXT,
+        disabled_fill: str = "#1b3337",
+        disabled_foreground: str = "#77928e",
+        glow: bool = False,
+        radius: int = 18,
+        font: tuple = ("Segoe UI", 10, "bold"),
+        bg: str = CARD_SOFT,
+    ) -> None:
+        super().__init__(parent, bg=bg)
+        self.text = text
+        self.command = command
+        self.width = width
+        self.height = height
+        self.fill = fill
+        self.active_fill = active_fill
+        self.foreground = foreground
+        self.disabled_fill = disabled_fill
+        self.disabled_foreground = disabled_foreground
+        self.glow = glow
+        self.radius = radius
+        self.font = font
+        self.state = "normal"
+        self.is_active = False
+        self.canvas = Canvas(
+            self,
+            width=width,
+            height=height,
+            bg=bg,
+            bd=0,
+            highlightthickness=0,
+            cursor="hand2",
+        )
+        self.canvas.pack(fill=BOTH, expand=True)
+        self.canvas.bind("<Button-1>", self._click)
+        self.canvas.bind("<Enter>", lambda _event: self._draw(hover=True))
+        self.canvas.bind("<Leave>", lambda _event: self._draw())
+        self._draw()
+
+    def _draw(self, hover: bool = False) -> None:
+        self.canvas.delete("all")
+        disabled = self.state == "disabled"
+        fill = self.disabled_fill if disabled else (self.active_fill if hover or self.is_active else self.fill)
+        text_color = self.disabled_foreground if disabled else self.foreground
+        shadow = GLOW if self.glow or self.is_active else SHADOW
+        draw_round_rect(
+            self.canvas,
+            5,
+            7,
+            self.width - 1,
+            self.height - 1,
+            self.radius,
+            fill=shadow,
+            outline="",
+        )
+        draw_round_rect(
+            self.canvas,
+            1,
+            1,
+            self.width - 6,
+            self.height - 7,
+            self.radius,
+            fill=fill,
+            outline=CARD_HIGHLIGHT if self.glow or self.is_active else CARD_BORDER,
+            width=1,
+        )
+        self.canvas.create_text(
+            (self.width - 6) // 2,
+            (self.height - 6) // 2,
+            text=self.text,
+            fill=text_color,
+            font=self.font,
+        )
+        self.canvas.configure(cursor="" if disabled else "hand2")
+
+    def _click(self, _event) -> None:
+        if self.state == "disabled" or not self.command:
+            return
+        self.command()
+
+    def configure(self, cnf=None, **kwargs):  # type: ignore[override]
+        if cnf:
+            kwargs.update(cnf)
+        if "state" in kwargs:
+            self.state = kwargs.pop("state")
+        if "active" in kwargs:
+            self.is_active = bool(kwargs.pop("active"))
+        if "text" in kwargs:
+            self.text = str(kwargs.pop("text"))
+        if kwargs:
+            super().configure(**kwargs)
+        self._draw()
+
+    config = configure
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -387,43 +609,45 @@ class BayouFindsCleanupGUI:
         border: str = CARD_BORDER,
         shadow: str = SHADOW,
         glow: bool = False,
+        bg: str = BG,
+        min_width: int = 120,
+        min_height: int = 90,
     ) -> Frame:
-        backing = Frame(parent, bg=GLOW if glow else shadow)
-        body = Frame(
-            backing,
-            bg=fill,
-            highlightbackground=CARD_HIGHLIGHT if glow else border,
-            highlightcolor=CARD_HIGHLIGHT if glow else border,
-            highlightthickness=1,
+        card = GlassCard(
+            parent,
+            fill=fill,
+            border=border,
+            bg=bg,
+            shadow=shadow,
+            glow=glow,
+            padding=padding,
+            min_width=min_width,
+            min_height=min_height,
         )
-        body.pack(fill=BOTH, expand=True, padx=(0, 3), pady=(0, 3))
-        inner = Frame(body, bg=fill)
-        inner.pack(fill=BOTH, expand=True, padx=padding, pady=padding)
-        inner._glass_outer = backing  # type: ignore[attr-defined]
-        inner._glass_body = body  # type: ignore[attr-defined]
-        return inner
+        card.inner._glass_outer = card  # type: ignore[attr-defined]
+        return card.inner
 
     def _build_layout(self) -> None:
         outer = ttk.Frame(self.root, style="Main.TFrame")
         outer.pack(fill=BOTH, expand=True)
 
-        sidebar_shell = Frame(outer, bg=GLOW)
-        sidebar_shell.pack(side=LEFT, fill=Y, padx=(18, 0), pady=18)
-        sidebar_shell.configure(width=218)
-        sidebar_shell.pack_propagate(False)
-
-        sidebar = Frame(
-            sidebar_shell,
-            bg=SIDEBAR,
-            highlightbackground="#246063",
-            highlightcolor="#246063",
-            highlightthickness=1,
+        sidebar_panel = GlassCard(
+            outer,
+            fill=SIDEBAR,
+            border="#2c7272",
+            bg=BG,
+            shadow=GLOW,
+            glow=True,
+            radius=30,
+            padding=12,
+            min_width=230,
+            min_height=640,
         )
-        sidebar.pack(fill=BOTH, expand=True, padx=(0, 4), pady=(0, 4))
-        sidebar.configure(width=214)
-        sidebar.pack_propagate(False)
+        sidebar_panel.pack(side=LEFT, fill=Y, padx=(18, 0), pady=18)
+        sidebar_panel.configure(width=230)
+        sidebar_panel.pack_propagate(False)
 
-        nav_inner = Frame(sidebar, bg=SIDEBAR)
+        nav_inner = Frame(sidebar_panel.inner, bg=SIDEBAR)
         nav_inner.pack(fill=BOTH, expand=True, padx=16, pady=16)
 
         ttk.Label(nav_inner, text="BayouFinds", style="SidebarTitle.TLabel").pack(anchor="w")
@@ -441,7 +665,7 @@ class BayouFindsCleanupGUI:
 
         Frame(nav_inner, bg=SIDEBAR).pack(fill=BOTH, expand=True)
 
-        license_panel = self._glass_card(nav_inner, fill="#11373b", padding=10, glow=True)
+        license_panel = self._glass_card(nav_inner, fill="#11373b", padding=10, glow=True, bg=SIDEBAR)
         license_panel._glass_outer.pack(fill=X, pady=(0, 12))  # type: ignore[attr-defined]
         ttk.Label(
             license_panel,
@@ -452,9 +676,9 @@ class BayouFindsCleanupGUI:
         ).pack(anchor="w")
         self.license_value_label = ttk.Label(
             license_panel,
-            text="Not checked",
+            text="● LICENSE REQUIRED",
             background="#11373b",
-            foreground=WARNING,
+            foreground=ERROR,
             font=("Segoe UI", 12, "bold"),
         )
         self.license_value_label.pack(anchor="w", pady=(2, 0))
@@ -640,18 +864,36 @@ class BayouFindsCleanupGUI:
             foreground=MUTED,
             font=("Segoe UI", 11, "bold"),
         ).pack(side=LEFT)
-        ttk.Button(
+        open_logs_button = GlassButton(
             results_header,
             text="Open Reports / Logs",
-            style="Secondary.TButton",
             command=self.open_log_folder,
-        ).pack(side=RIGHT, padx=(8, 0))
-        ttk.Button(
+            width=154,
+            height=40,
+            fill="#173f44",
+            active_fill="#22595e",
+            foreground=TEXT,
+            radius=16,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f3034",
+        )
+        open_logs_button.pack(side=RIGHT, padx=(8, 0))
+        self.buttons.append(open_logs_button)
+        technical_button = GlassButton(
             results_header,
             text="View Technical Details",
-            style="Secondary.TButton",
             command=self.view_technical_details,
-        ).pack(side=RIGHT)
+            width=162,
+            height=40,
+            fill="#173f44",
+            active_fill="#22595e",
+            foreground=TEXT,
+            radius=16,
+            font=("Segoe UI", 9, "bold"),
+            bg="#0f3034",
+        )
+        technical_button.pack(side=RIGHT)
+        self.buttons.append(technical_button)
 
         self.status_label = ttk.Label(
             results_card,
@@ -670,13 +912,13 @@ class BayouFindsCleanupGUI:
             selectbackground="#246063",
             relief="flat",
             wrap="word",
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 12),
             height=10,
         )
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Start with Scan My PC.\n\nThe scan creates a clear report and does not delete files. Cleanup stays locked until an active license is installed.\n\nRaw technical logs stay behind Open Reports / Logs or View Technical Details.\n",
+            "No scan has been run yet.\n\nClick Scan My PC to check for safe temporary files and app caches.\n\nTechnical details stay hidden until you click View Technical Details.",
         )
         self.output.configure(state="disabled")
         self._set_active_nav("Home")
@@ -691,7 +933,7 @@ class BayouFindsCleanupGUI:
         row: int,
         column: int,
     ) -> ttk.Label:
-        card = self._glass_card(parent, fill=CARD, padding=12, glow=column == 0)
+        card = self._glass_card(parent, fill=CARD, padding=14, glow=column == 0, min_height=132)
         card._glass_outer.grid(row=row, column=column, sticky="nsew", padx=5, pady=4)  # type: ignore[attr-defined]
         ttk.Label(
             card,
@@ -732,14 +974,29 @@ class BayouFindsCleanupGUI:
                 self._set_active_nav(label)
             command()
 
-        button = ttk.Button(parent, text=label, style="Sidebar.TButton", command=run_command)
+        button = GlassButton(
+            parent,
+            text=label,
+            command=run_command,
+            width=176,
+            height=42,
+            fill=SIDEBAR,
+            active_fill="#1d6868",
+            foreground="#e8fbf6",
+            disabled_fill=SIDEBAR,
+            disabled_foreground="#81aaa4",
+            glow=False,
+            radius=17,
+            font=("Segoe UI", 10, "bold"),
+            bg=SIDEBAR,
+        )
         button.pack(fill=X, pady=3)
         if label in {"Home", "Scan", "Cleanup", "Reports", "License", "Help"}:
             self.sidebar_buttons[label] = button
 
     def _set_active_nav(self, label: str) -> None:
         for button_label, button in self.sidebar_buttons.items():
-            button.configure(style="SidebarActive.TButton" if button_label == label else "Sidebar.TButton")
+            button.configure(active=button_label == label)
 
     def _set_view(self, view_name: str) -> None:
         self._set_active_nav(view_name)
@@ -789,7 +1046,22 @@ class BayouFindsCleanupGUI:
         self.result_banner_label.configure(text=text, foreground=foreground)
 
     def _add_primary_button(self, parent, label: str, command, side: str | None = None) -> None:
-        button = ttk.Button(parent, text=label, style="Primary.TButton", command=command)
+        button = GlassButton(
+            parent,
+            text=label,
+            command=command,
+            width=248,
+            height=62,
+            fill=PRIMARY,
+            active_fill=PRIMARY_DARK,
+            foreground="#082320",
+            disabled_fill="#34564e",
+            disabled_foreground="#b8cbc5",
+            glow=True,
+            radius=23,
+            font=("Segoe UI", 14, "bold"),
+            bg=CARD_SOFT,
+        )
         pack_options = {"fill": X, "pady": 6}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
@@ -797,7 +1069,22 @@ class BayouFindsCleanupGUI:
         self.buttons.append(button)
 
     def _add_action_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
-        button = ttk.Button(parent, text=label, style="Action.TButton", command=command)
+        button = GlassButton(
+            parent,
+            text=label,
+            command=command,
+            width=248,
+            height=48,
+            fill="#1f595d",
+            active_fill="#28777a",
+            foreground=TEXT,
+            disabled_fill="#1b3337",
+            disabled_foreground="#77928e",
+            glow=False,
+            radius=19,
+            font=("Segoe UI", 10, "bold"),
+            bg=CARD_SOFT,
+        )
         pack_options = {"fill": X, "pady": 5}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
@@ -807,7 +1094,22 @@ class BayouFindsCleanupGUI:
             self.licensed_buttons.append(button)
 
     def _add_secondary_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
-        button = ttk.Button(parent, text=label, style="Secondary.TButton", command=command)
+        button = GlassButton(
+            parent,
+            text=label,
+            command=command,
+            width=120,
+            height=40,
+            fill="#173f44",
+            active_fill="#22595e",
+            foreground=TEXT,
+            disabled_fill="#172f33",
+            disabled_foreground="#77928e",
+            glow=False,
+            radius=16,
+            font=("Segoe UI", 9, "bold"),
+            bg=CARD_SOFT,
+        )
         pack_options = {"fill": X, "pady": 5}
         if side:
             pack_options.update({"side": side, "expand": True, "padx": 4})
@@ -821,11 +1123,11 @@ class BayouFindsCleanupGUI:
         self.license_state = state
 
         if state == "active":
-            self._set_dashboard_value(self.license_value_label, "🟢 Active", SUCCESS)
+            self._set_dashboard_value(self.license_value_label, "● ACTIVE", SUCCESS)
             self._set_result_banner("License Active — Cleanup enabled", SUCCESS)
             self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Scan, then run cleanup", TEXT)
         elif state == "trial":
-            self._set_dashboard_value(self.license_value_label, "🟡 Trial Mode", WARNING)
+            self._set_dashboard_value(self.license_value_label, "● TRIAL MODE", WARNING)
             self._set_result_banner("Trial Mode — Scan and reports enabled", WARNING)
             self._set_dashboard_value(
                 self.recommendation_value_label,
@@ -833,7 +1135,7 @@ class BayouFindsCleanupGUI:
                 WARNING,
             )
         else:
-            self._set_dashboard_value(self.license_value_label, "🔴 License Required", ERROR)
+            self._set_dashboard_value(self.license_value_label, "● LICENSE REQUIRED", ERROR)
             self._set_result_banner("License Required — Scan and reports enabled", WARNING)
             self._set_dashboard_value(
                 self.recommendation_value_label,
@@ -1218,13 +1520,13 @@ class BayouFindsCleanupGUI:
                 self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Review the report", WARNING)
         elif action_name == "License Status":
             if exit_code == 0 and self.last_license_mode == "licensed":
-                self._set_dashboard_value(self.license_value_label, "🟢 Active", SUCCESS)
+                self._set_dashboard_value(self.license_value_label, "● ACTIVE", SUCCESS)
                 self.license_state = "active"
             elif exit_code == 0 and self.last_license_mode == "trial":
-                self._set_dashboard_value(self.license_value_label, "🟡 Trial Mode", WARNING)
+                self._set_dashboard_value(self.license_value_label, "● TRIAL MODE", WARNING)
                 self.license_state = "trial"
             else:
-                self._set_dashboard_value(self.license_value_label, "🔴 License Required", ERROR)
+                self._set_dashboard_value(self.license_value_label, "● LICENSE REQUIRED", ERROR)
                 self.license_state = "required"
             self._apply_license_button_state()
 
