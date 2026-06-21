@@ -887,20 +887,12 @@ class BayouFindsCleanupGUI:
             padding=18,
         )
         self._canvas_text(license_cx, license_cy, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
-        self.license_value_label = self._canvas_text(
-            license_cx,
-            license_cy + 24,
-            "● LICENSE REQUIRED",
-            fill=ERROR,
-            font=("Segoe UI", 10, "bold"),
-            width=license_cw,
-        )
         self._canvas_text(
             license_cx,
-            license_cy + 58,
-            "Trial mode:\nscan and reports only",
+            license_cy + 26,
+            "Trial mode includes scans and reports.",
             fill=MUTED,
-            font=("Segoe UI", 8),
+            font=("Segoe UI", 9),
             width=license_cw,
         )
 
@@ -1039,6 +1031,7 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 11, "bold"),
             width=status_col_w - 24,
         )
+        self.license_value_label = self.status_license_value_label
 
         middle_y = status_y + status_h + 22
         middle_h = 180
@@ -1062,31 +1055,12 @@ class BayouFindsCleanupGUI:
         self._canvas_text(
             start_cx,
             start_cy + 42,
-            "Scan first. Cleanup stays locked until your license is active.",
+            "Run a safe scan to estimate recoverable space. No files are deleted during a scan.",
             fill=MUTED,
-            font=("Segoe UI", 11),
-            width=max(220, start_cw - 300),
+            font=("Segoe UI", 12),
+            width=start_cw,
         )
-        action_button_w = ACTION_BUTTON_WIDTH
-        button_x = min(start_cx + start_cw - action_button_w, content_x + start_w - CARD_PADDING - action_button_w)
-        button_x = max(start_cx, button_x)
-        self._add_primary_button(
-            self.dashboard_canvas,
-            "Scan My PC",
-            self.scan_my_pc,
-            x=button_x,
-            y=start_cy + 10,
-            bounds=(start_cx, start_cy, start_cw, start_ch),
-        )
-        self._add_action_button(
-            self.dashboard_canvas,
-            "Run Safe Cleanup",
-            self.quick_cleanup,
-            requires_license=True,
-            x=button_x,
-            y=start_cy + 80,
-            bounds=(start_cx, start_cy, start_cw, start_ch),
-        )
+        self._canvas_text(start_cx, start_cy + start_ch - 26, "Status: Ready", fill=SUCCESS, font=("Segoe UI", 11, "bold"))
 
         protected_x = content_x + start_w + gap
         protected_cx, protected_cy, protected_cw, protected_ch = self._canvas_panel(
