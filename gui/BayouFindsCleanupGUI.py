@@ -1,4 +1,4 @@
-"""BayouFinds Windows Cleanup v1.4.0 RC Tkinter GUI."""
+"""BayouFinds Windows Cleanup v1.5.0 Tkinter GUI."""
 
 from __future__ import annotations
 
@@ -25,8 +25,9 @@ except ImportError:
 
 
 APP_NAME = "BayouFinds Cleanup Assistant"
-APP_VERSION = "v1.4.0 RC"
+APP_VERSION = "v1.5.0"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
+PURCHASE_URL = "https://bayoufinds.com/b/y3OJr"
 WINDOW_SIZE = "940x620"
 WINDOW_WIDTH = 940
 WINDOW_HEIGHT = 620
@@ -179,14 +180,18 @@ class BayouFindsCleanupGUI:
         self.current_process: subprocess.Popen[str] | None = None
         self.current_action_name: str | None = None
         self.last_license_mode: str | None = None
+        self.license_state = "required"
         self.run_output_lines: list[str] = []
         self.run_started_at: float | None = None
         self.images: list[PhotoImage] = []
+        self.buttons: list[ttk.Button] = []
+        self.licensed_buttons: list[ttk.Button] = []
 
         self._configure_styles()
         self._set_icon()
         self._build_menu()
         self._build_layout()
+        self.refresh_license_state()
         self._poll_output_queue()
 
     def _get_base_dir(self) -> Path:
@@ -329,6 +334,7 @@ class BayouFindsCleanupGUI:
         help_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
 
         file_menu.add_command(label="Import License", command=self.import_license)
+        file_menu.add_command(label="Purchase License", command=self.purchase_license)
         file_menu.add_command(label="Open Latest Report", command=self.open_latest_report)
         file_menu.add_command(label="Open Reports / Logs", command=self.open_log_folder)
         file_menu.add_separator()
@@ -407,11 +413,18 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 12, "bold"),
         )
         self.license_value_label.pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            license_panel,
+            text="Trial mode: scan and reports only",
+            background=PANEL_SOFT,
+            foreground=MUTED,
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(2, 0))
 
-        self.buttons: list[ttk.Button] = []
         self._add_action_button(controls, "Import License", self.import_license)
+        self._add_secondary_button(controls, "Purchase License", self.purchase_license)
         self._add_primary_button(controls, "Scan My PC", self.scan_my_pc)
-        self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup)
+        self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
         self._add_secondary_button(controls, "Open Latest Report", self.open_latest_report)
         self._add_secondary_button(controls, "Open Reports / Logs", self.open_log_folder)
 
@@ -442,8 +455,8 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
         self._add_secondary_button(controls, "License Status", self.license_status)
-        self._add_secondary_button(controls, "Deep Windows Check", self.deep_cleanup)
-        self._add_secondary_button(controls, "Repair Windows Files", self.repair_windows_files)
+        self._add_secondary_button(controls, "Deep Windows Check", self.deep_cleanup, requires_license=True)
+        self._add_secondary_button(controls, "Repair Windows Files", self.repair_windows_files, requires_license=True)
         self._add_secondary_button(controls, "About", self.show_about)
         self._add_secondary_button(controls, "Exit", self.root.destroy)
 
@@ -555,15 +568,155 @@ class BayouFindsCleanupGUI:
         button.pack(fill=X, pady=6)
         self.buttons.append(button)
 
-    def _add_action_button(self, parent: ttk.Frame, label: str, command) -> None:
+    def _add_action_button(self, parent: ttk.Frame, label: str, command, requires_license: bool = False) -> None:
         button = ttk.Button(parent, text=label, style="Action.TButton", command=command)
         button.pack(fill=X, pady=5)
         self.buttons.append(button)
+        if requires_license:
+            self.licensed_buttons.append(button)
 
-    def _add_secondary_button(self, parent: ttk.Frame, label: str, command) -> None:
+    def _add_secondary_button(self, parent: ttk.Frame, label: str, command, requires_license: bool = False) -> None:
         button = ttk.Button(parent, text=label, style="Secondary.TButton", command=command)
         button.pack(fill=X, pady=5)
         self.buttons.append(button)
+        if requires_license:
+            self.licensed_buttons.append(button)
+
+    def refresh_license_state(self) -> None:
+        state, detail = self._read_local_license_state()
+        self.license_state = state
+
+        if state == "active":
+            self._set_dashboard_value(self.license_value_label, "🟢 Active", SUCCESS)
+            self._set_result_banner("License Active — Cleanup enabled", SUCCESS)
+            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Scan, then run cleanup", TEXT)
+        elif state == "trial":
+            self._set_dashboard_value(self.license_value_label, "🟡 Trial", WARNING)
+            self._set_result_banner("Trial Mode — Scan and reports enabled", WARNING)
+            self._set_dashboard_value(
+                self.recommendation_value_label,
+                "Recommendation: Purchase a license to clean",
+                WARNING,
+            )
+        else:
+            self._set_dashboard_value(self.license_value_label, "🔴 License Required", ERROR)
+            self._set_result_banner("License Required — Scan and reports enabled", WARNING)
+            self._set_dashboard_value(
+                self.recommendation_value_label,
+                "Recommendation: Purchase or import a license",
+                WARNING,
+            )
+
+        self._apply_license_button_state()
+        if detail:
+            self.status_label.configure(text=detail, foreground=MUTED if state != "active" else SUCCESS)
+
+    def _read_local_license_state(self) -> tuple[str, str]:
+        candidates = [
+            (Path.home() / ".bayoufinds" / "license.json", "json"),
+            (Path.home() / ".bayoufinds" / "license.key", "legacy-key"),
+        ]
+
+        for path, license_format in candidates:
+            if not path.exists():
+                continue
+
+            if license_format == "legacy-key":
+                return "active", "Legacy license found"
+
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                return "required", "License needs attention"
+
+            product = str(data.get("product") or data.get("product_id") or data.get("app") or "").lower()
+            if product and product != "bayoufinds-windows-cleanup" and "cleanup" not in product:
+                return "required", "License product mismatch"
+
+            mode = str(data.get("mode") or data.get("license_mode") or "Licensed").strip().lower()
+            expires_at = data.get("expiresAt") or data.get("expires_at") or data.get("expires") or data.get("expiration")
+            if expires_at and self._is_expired(str(expires_at)):
+                return "required", "License expired"
+
+            if mode in {"licensed", "active", "paid"}:
+                return "active", "Active license found"
+            if mode == "trial":
+                return "trial", "Trial license found"
+            return "required", "License required"
+
+        return "required", "No license found"
+
+    def _is_expired(self, expires_at: str) -> bool:
+        normalized = expires_at.replace("Z", "+00:00")
+        try:
+            expires_on = datetime.fromisoformat(normalized)
+            if expires_on.tzinfo:
+                return expires_on < datetime.now().astimezone()
+            return expires_on < datetime.now()
+        except ValueError:
+            pass
+
+        for date_format in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(expires_at, date_format) < datetime.now()
+            except ValueError:
+                continue
+        return True
+
+    def _apply_license_button_state(self) -> None:
+        state = "normal" if self.license_state == "active" else "disabled"
+        for button in self.licensed_buttons:
+            button.configure(state=state)
+
+    def _has_active_license(self) -> bool:
+        self.refresh_license_state()
+        return self.license_state == "active"
+
+    def purchase_license(self) -> None:
+        webbrowser.open(PURCHASE_URL)
+
+    def _show_license_required_prompt(self) -> None:
+        prompt = Toplevel(self.root)
+        prompt.title("License Required")
+        prompt.geometry("500x260")
+        prompt.configure(bg=BG)
+        prompt.resizable(False, False)
+        prompt.transient(self.root)
+        prompt.grab_set()
+
+        frame = ttk.Frame(prompt, padding=22)
+        frame.pack(fill=BOTH, expand=True)
+        ttk.Label(frame, text="License Required", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "License Required. Scan and reports are available in trial mode. "
+                "Activate to clean and recover space."
+            ),
+            style="TLabel",
+            wraplength=440,
+        ).pack(anchor="w", pady=(10, 18))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill=X)
+        ttk.Button(
+            buttons,
+            text="Purchase License",
+            style="Action.TButton",
+            command=lambda: (prompt.destroy(), self.purchase_license()),
+        ).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(
+            buttons,
+            text="Import License",
+            style="Secondary.TButton",
+            command=lambda: (prompt.destroy(), self.import_license()),
+        ).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(
+            buttons,
+            text="Not Now",
+            style="Secondary.TButton",
+            command=prompt.destroy,
+        ).pack(side=RIGHT)
 
     def import_license(self) -> None:
         selected = filedialog.askopenfilename(
@@ -611,14 +764,17 @@ class BayouFindsCleanupGUI:
             f"License imported successfully.\nInstalled to: {destination}\nCustomer: {customer}\nExpires: {expires}\n\n"
         )
         self.status_label.configure(text="License imported", foreground=SUCCESS)
-        self._set_dashboard_value(self.license_value_label, "Active", SUCCESS)
-        self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Click Scan My PC next", TEXT)
+        self.refresh_license_state()
         messagebox.showinfo(
             WINDOW_TITLE,
             f"License imported successfully.\n\nCustomer: {customer}\nExpires: {expires}\n\nYou can now click License Status to verify activation.",
         )
 
     def quick_cleanup(self) -> None:
+        if not self._has_active_license():
+            self._show_license_required_prompt()
+            return
+
         if not messagebox.askyesno(
             "Run Safe Cleanup",
             "Run safe cleanup now?\n\nThis cleans safe temporary files and app caches only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads."
@@ -627,6 +783,10 @@ class BayouFindsCleanupGUI:
         self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
 
     def deep_cleanup(self) -> None:
+        if not self._has_active_license():
+            self._show_license_required_prompt()
+            return
+
         if not messagebox.askyesno(
             "Deep Windows Check",
             "Deep Windows Check may take longer because it runs additional Windows file checks.\n\nIt still uses the safe cleanup engine. Continue?"
@@ -638,6 +798,10 @@ class BayouFindsCleanupGUI:
         self.run_cleanup("Scan My PC", ["-NoMenu", "-Mode", "Preview"])
 
     def repair_windows_files(self) -> None:
+        if not self._has_active_license():
+            self._show_license_required_prompt()
+            return
+
         self.run_cleanup("Repair Windows Files", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
 
     def license_status(self) -> None:
@@ -776,6 +940,9 @@ class BayouFindsCleanupGUI:
         for button in self.buttons:
             button.configure(state="disabled" if running else "normal")
 
+        if not running:
+            self._apply_license_button_state()
+
         if running:
             self.status_label.configure(text="Running...", foreground=ACCENT)
         else:
@@ -813,10 +980,16 @@ class BayouFindsCleanupGUI:
             else:
                 self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Review the report", WARNING)
         elif action_name == "License Status":
-            if exit_code == 0 and self.last_license_mode in {"licensed", "trial"}:
-                self._set_dashboard_value(self.license_value_label, "Active", SUCCESS)
+            if exit_code == 0 and self.last_license_mode == "licensed":
+                self._set_dashboard_value(self.license_value_label, "🟢 Active", SUCCESS)
+                self.license_state = "active"
+            elif exit_code == 0 and self.last_license_mode == "trial":
+                self._set_dashboard_value(self.license_value_label, "🟡 Trial", WARNING)
+                self.license_state = "trial"
             else:
-                self._set_dashboard_value(self.license_value_label, "Needs attention", ERROR)
+                self._set_dashboard_value(self.license_value_label, "🔴 License Required", ERROR)
+                self.license_state = "required"
+            self._apply_license_button_state()
 
     def _show_structured_breakdown(self, action_name: str | None, exit_code: int) -> None:
         report = self._load_latest_json_report()
@@ -945,8 +1118,17 @@ class BayouFindsCleanupGUI:
         license_info = report.get("License") or {}
         mode = license_info.get("Mode") or "Not checked"
         message = license_info.get("Message") or "License check complete."
-        status = "Active" if str(mode).lower() in {"licensed", "trial"} else "Needs attention"
-        self._set_result_banner(f"License Status — {status}", SUCCESS if status == "Active" else WARNING)
+        normalized_mode = str(mode).lower()
+        if normalized_mode == "licensed":
+            status = "Active"
+            color = SUCCESS
+        elif normalized_mode == "trial":
+            status = "Trial"
+            color = WARNING
+        else:
+            status = "Needs attention"
+            color = ERROR
+        self._set_result_banner(f"License Status — {status}", color)
         return "\n".join([
             f"License Status: {status}",
             "",

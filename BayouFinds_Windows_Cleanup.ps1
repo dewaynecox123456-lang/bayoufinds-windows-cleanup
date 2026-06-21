@@ -17,7 +17,7 @@ param(
 
 #region Configuration
 $ErrorActionPreference = "SilentlyContinue"
-$ToolVersion = "1.4.0 RC"
+$ToolVersion = "1.5.0"
 if ($OutputDir) {
     $LogDir = $OutputDir
 }
@@ -1392,6 +1392,13 @@ function Invoke-CleanupRun {
 
     if ($RunMode -eq "BackupBookmarks") {
         Backup-BrowserBookmarks
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
+    if ($RunMode -eq "SafeCleanup" -and $LicenseInfo.Mode -ne "Licensed") {
+        Write-Log "LICENSE REQUIRED: Scan and reports are available in trial mode. Activate to clean and recover space."
+        Add-ReportNote -Message "License required for Safe Cleanup. Preview reports remain available."
         Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
         return
     }
