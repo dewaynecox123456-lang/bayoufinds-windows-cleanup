@@ -17,7 +17,7 @@ param(
 
 #region Configuration
 $ErrorActionPreference = "SilentlyContinue"
-$ToolVersion = "1.3.2"
+$ToolVersion = "1.4.0 RC"
 if ($OutputDir) {
     $LogDir = $OutputDir
 }

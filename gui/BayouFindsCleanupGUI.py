@@ -1,4 +1,4 @@
-"""BayouFinds Windows Cleanup v1.3.2 Tkinter GUI."""
+"""BayouFinds Windows Cleanup v1.4.0 RC Tkinter GUI."""
 
 from __future__ import annotations
 
@@ -25,14 +25,14 @@ except ImportError:
 
 
 APP_NAME = "BayouFinds Cleanup Assistant"
-APP_VERSION = "v1.3.2"
-WINDOW_TITLE = f"{APP_NAME} {APP_VERSION} Beta"
+APP_VERSION = "v1.4.0 RC"
+WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
 WINDOW_SIZE = "940x620"
 WINDOW_WIDTH = 940
 WINDOW_HEIGHT = 620
 CONTENT_PADDING = 18
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
-HEADER_IMAGE_MAX_HEIGHT = 96
+HEADER_IMAGE_MAX_HEIGHT = 58
 MASCOT_IMAGE_MAX_WIDTH = 170
 MASCOT_IMAGE_MAX_HEIGHT = 170
 SPLASH_WIDTH = 620
@@ -44,6 +44,7 @@ BG = "#10242a"
 PANEL = "#183039"
 PANEL_ALT = "#213d46"
 PANEL_SOFT = "#1f3a43"
+CARD = "#244650"
 TEXT = "#f5f8f7"
 MUTED = "#b8c9c7"
 ACCENT = "#39a9c7"
@@ -236,10 +237,30 @@ class BayouFindsCleanupGUI:
         style.configure("TFrame", background=BG)
         style.configure("Panel.TFrame", background=PANEL)
         style.configure("SoftPanel.TFrame", background=PANEL_SOFT)
+        style.configure("Card.TFrame", background=CARD)
         style.configure("TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 10))
         style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
         style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 22, "bold"))
         style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 11))
+        style.configure(
+            "CardTitle.TLabel",
+            background=CARD,
+            foreground=MUTED,
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.configure(
+            "CardValue.TLabel",
+            background=CARD,
+            foreground=TEXT,
+            font=("Segoe UI", 16, "bold"),
+        )
+        style.configure(
+            "Banner.TLabel",
+            background=CARD,
+            foreground=TEXT,
+            font=("Segoe UI", 13, "bold"),
+            padding=(12, 10),
+        )
         style.configure(
             "DashboardTitle.TLabel",
             background=PANEL_SOFT,
@@ -369,12 +390,48 @@ class BayouFindsCleanupGUI:
             justify="left",
         ).pack(anchor="w", pady=(4, 12))
 
+        license_panel = ttk.Frame(controls, style="SoftPanel.TFrame", padding=10)
+        license_panel.pack(fill=X, pady=(0, 12))
+        ttk.Label(
+            license_panel,
+            text="License",
+            background=PANEL_SOFT,
+            foreground=MUTED,
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w")
+        self.license_value_label = ttk.Label(
+            license_panel,
+            text="Not checked",
+            background=PANEL_SOFT,
+            foreground=WARNING,
+            font=("Segoe UI", 12, "bold"),
+        )
+        self.license_value_label.pack(anchor="w", pady=(2, 0))
+
         self.buttons: list[ttk.Button] = []
         self._add_action_button(controls, "Import License", self.import_license)
         self._add_primary_button(controls, "Scan My PC", self.scan_my_pc)
         self._add_action_button(controls, "Run Safe Cleanup", self.quick_cleanup)
         self._add_secondary_button(controls, "Open Latest Report", self.open_latest_report)
         self._add_secondary_button(controls, "Open Reports / Logs", self.open_log_folder)
+
+        protected = ttk.Frame(controls, style="SoftPanel.TFrame", padding=10)
+        protected.pack(fill=X, pady=(10, 0))
+        ttk.Label(
+            protected,
+            text="Protected by Default",
+            background=PANEL_SOFT,
+            foreground=SUCCESS,
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            protected,
+            text="Documents  Pictures  Downloads\nDesktop  Videos  Music",
+            background=PANEL_SOFT,
+            foreground=TEXT,
+            font=("Segoe UI", 9),
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
         ttk.Separator(controls).pack(fill=X, pady=10)
         ttk.Label(
@@ -393,25 +450,39 @@ class BayouFindsCleanupGUI:
         output_panel = ttk.Frame(body, style="Panel.TFrame", padding=14)
         output_panel.pack(side=RIGHT, fill=BOTH, expand=True, padx=(16, 0))
 
-        dashboard = ttk.Frame(output_panel, style="SoftPanel.TFrame", padding=12)
+        dashboard = ttk.Frame(output_panel, style="Panel.TFrame")
         dashboard.pack(fill=X, pady=(0, 12))
 
-        self.license_value_label = self._add_dashboard_row(dashboard, "License", "Not checked")
-        self.last_scan_value_label = self._add_dashboard_row(dashboard, "Last Scan", "Not run yet")
-        self.recoverable_value_label = self._add_dashboard_row(dashboard, "Recoverable Space", "0 B")
-        self.recovered_run_value_label = self._add_dashboard_row(dashboard, "Recovered This Run", "0 B")
-        self.total_recovered_value_label = self._add_dashboard_row(dashboard, "Total Recovered", "0 B")
-        self.health_score_value_label = self._add_dashboard_row(dashboard, "PC Health Score", "100")
-        self.recommendation_value_label = self._add_dashboard_row(
-            dashboard,
-            "Recommendation",
-            "Start with Scan My PC",
+        self.recoverable_value_label = self._add_metric_card(dashboard, "Recoverable Space", "0 B", 0, 0)
+        self.recovered_run_value_label = self._add_metric_card(dashboard, "Recovered This Run", "0 B", 0, 1)
+        self.total_recovered_value_label = self._add_metric_card(dashboard, "Total Recovered", "0 B", 1, 0)
+        self.health_score_value_label = self._add_metric_card(dashboard, "PC Health Score", "100/100", 1, 1)
+        dashboard.columnconfigure(0, weight=1)
+        dashboard.columnconfigure(1, weight=1)
+
+        self.last_scan_value_label = ttk.Label(
+            output_panel,
+            text="Last Scan: Not run yet",
+            background=PANEL,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
         )
-        self.safety_value_label = self._add_dashboard_row(
-            dashboard,
-            "Safety",
-            "Personal files protected",
+        self.last_scan_value_label.pack(anchor="w", pady=(0, 2))
+        self.recommendation_value_label = ttk.Label(
+            output_panel,
+            text="Recommendation: Start with Scan My PC",
+            background=PANEL,
+            foreground=TEXT,
+            font=("Segoe UI", 9, "bold"),
         )
+        self.recommendation_value_label.pack(anchor="w", pady=(0, 10))
+
+        self.result_banner_label = ttk.Label(
+            output_panel,
+            text="Ready — Start with Scan My PC",
+            style="Banner.TLabel",
+        )
+        self.result_banner_label.pack(fill=X, pady=(0, 10))
 
         ttk.Label(
             output_panel,
@@ -444,9 +515,17 @@ class BayouFindsCleanupGUI:
         self.output.pack(fill=BOTH, expand=True)
         self.output.insert(
             END,
-            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nAfter the scan, this panel shows a cleanup breakdown with recoverable space, recovered space, total recovered, and PC health score. Use Run Safe Cleanup only when you are ready.\n\nSafety promise:\nBayouFinds protects your Documents, Pictures, Desktop, Videos, Music, and Downloads by default.\nRegistry cleaning and driver cleanup are not included.\n\nReports and logs are saved to your Desktop in BayouFinds_Cleanup_Logs.\n\n",
+            "Welcome to BayouFinds Cleanup Assistant.\n\nClick Scan My PC to check safe temporary files and app caches, then create a report. The scan does not delete files.\n\nYour raw technical logs stay available behind Open Reports / Logs. This screen keeps the results simple.\n\nProtected by default: Documents, Pictures, Downloads, Desktop, Videos, and Music.\nRegistry cleaning and driver cleanup are not included.\n\n",
         )
         self.output.configure(state="disabled")
+
+    def _add_metric_card(self, parent: ttk.Frame, label: str, value: str, row: int, column: int) -> ttk.Label:
+        card = ttk.Frame(parent, style="Card.TFrame", padding=12)
+        card.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
+        ttk.Label(card, text=label, style="CardTitle.TLabel").pack(anchor="w")
+        value_label = ttk.Label(card, text=value, style="CardValue.TLabel")
+        value_label.pack(anchor="w", pady=(4, 0))
+        return value_label
 
     def _add_dashboard_row(self, parent: ttk.Frame, label: str, value: str) -> ttk.Label:
         row = ttk.Frame(parent, style="SoftPanel.TFrame")
@@ -467,6 +546,9 @@ class BayouFindsCleanupGUI:
 
     def _set_dashboard_value(self, label: ttk.Label, value: str, foreground: str = TEXT) -> None:
         label.configure(text=value, foreground=foreground)
+
+    def _set_result_banner(self, text: str, foreground: str = TEXT) -> None:
+        self.result_banner_label.configure(text=text, foreground=foreground)
 
     def _add_primary_button(self, parent: ttk.Frame, label: str, command) -> None:
         button = ttk.Button(parent, text=label, style="Primary.TButton", command=command)
@@ -529,8 +611,8 @@ class BayouFindsCleanupGUI:
             f"License imported successfully.\nInstalled to: {destination}\nCustomer: {customer}\nExpires: {expires}\n\n"
         )
         self.status_label.configure(text="License imported", foreground=SUCCESS)
-        self._set_dashboard_value(self.license_value_label, "Valid", SUCCESS)
-        self._set_dashboard_value(self.recommendation_value_label, "Click Scan My PC next", TEXT)
+        self._set_dashboard_value(self.license_value_label, "Active", SUCCESS)
+        self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Click Scan My PC next", TEXT)
         messagebox.showinfo(
             WINDOW_TITLE,
             f"License imported successfully.\n\nCustomer: {customer}\nExpires: {expires}\n\nYou can now click License Status to verify activation.",
@@ -577,6 +659,7 @@ class BayouFindsCleanupGUI:
         self.current_action_name = action_name
         self.run_output_lines = []
         self.run_started_at = datetime.now().timestamp()
+        self._set_result_banner(f"{action_name} is running...", ACCENT)
         self._update_dashboard_for_start(action_name)
         self._clear_output()
         self._append_output(f"{action_name} is running...\n\n")
@@ -700,13 +783,13 @@ class BayouFindsCleanupGUI:
 
     def _update_dashboard_for_start(self, action_name: str) -> None:
         if action_name == "Scan My PC":
-            self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
+            self._set_dashboard_value(self.last_scan_value_label, "Last Scan: Running now", ACCENT)
             self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
             self._set_dashboard_value(self.recovered_run_value_label, "0 B", MUTED)
-            self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
+            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Wait for scan results", TEXT)
         elif action_name == "Run Safe Cleanup":
             self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
-            self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
+            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Cleaning safe temporary files", TEXT)
         elif action_name == "License Status":
             self._set_dashboard_value(self.license_value_label, "Checking", ACCENT)
             self.last_license_mode = None
@@ -715,23 +798,23 @@ class BayouFindsCleanupGUI:
         now = datetime.now().strftime("%I:%M %p").lstrip("0")
         if action_name == "Scan My PC":
             if exit_code == 0:
-                self._set_dashboard_value(self.last_scan_value_label, f"Completed at {now}", SUCCESS)
+                self._set_dashboard_value(self.last_scan_value_label, f"Last Scan: Completed at {now}", SUCCESS)
                 self._set_dashboard_value(
                     self.recommendation_value_label,
-                    "Review results, then run cleanup",
+                    "Recommendation: Review results, then run cleanup",
                     TEXT,
                 )
             else:
-                self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
-                self._set_dashboard_value(self.recommendation_value_label, "Open the report before cleanup", WARNING)
+                self._set_dashboard_value(self.last_scan_value_label, "Last Scan: Needs attention", ERROR)
+                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Open the report before cleanup", WARNING)
         elif action_name == "Run Safe Cleanup":
             if exit_code == 0:
-                self._set_dashboard_value(self.recommendation_value_label, "Cleanup complete", SUCCESS)
+                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Cleanup complete", SUCCESS)
             else:
-                self._set_dashboard_value(self.recommendation_value_label, "Review the report", WARNING)
+                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Review the report", WARNING)
         elif action_name == "License Status":
             if exit_code == 0 and self.last_license_mode in {"licensed", "trial"}:
-                self._set_dashboard_value(self.license_value_label, "Valid", SUCCESS)
+                self._set_dashboard_value(self.license_value_label, "Active", SUCCESS)
             else:
                 self._set_dashboard_value(self.license_value_label, "Needs attention", ERROR)
 
@@ -741,11 +824,18 @@ class BayouFindsCleanupGUI:
         self._clear_output()
 
         if report:
+            if report.get("RunMode") == "LicenseCheck":
+                self._append_output(self._format_license_breakdown(report, exit_code))
+                return
             self._update_metrics_from_report(report, stats)
             self._append_output(self._format_cleanup_breakdown(report, action_name, exit_code))
             return
 
         self._append_output(f"{action_name or 'Task'} finished with exit code {exit_code}.\n\n")
+        self._set_result_banner(
+            f"{action_name or 'Task'} finished with errors" if exit_code else f"{action_name or 'Task'} complete",
+            ERROR if exit_code else SUCCESS,
+        )
         self._append_output("A structured report was not found yet. Open the reports folder to review the log.\n\n")
         if self.run_output_lines:
             self._append_output("Recent messages:\n")
@@ -791,40 +881,56 @@ class BayouFindsCleanupGUI:
         statistics = report.get("Statistics") or {}
         categories = report.get("CleanupCategories") or []
         run_mode = report.get("RunMode") or action_name or "Cleanup"
+        recoverable = int(statistics.get("RecoverableBytes") or 0)
+        recovered = int(statistics.get("RecoveredBytes") or 0)
+        total_recovered = int(statistics.get("TotalRecoveredBytes") or 0)
+        health_score = int(statistics.get("PCHealthScore") or 100)
+        is_preview = run_mode == "Preview" or action_name == "Scan My PC"
+        banner = (
+            f"Scan Complete — Recoverable Space Found: {self._format_gb(recoverable)}"
+            if is_preview
+            else f"Cleanup Complete — Space Recovered: {self._format_gb(recovered)}"
+        )
+        self._set_result_banner(banner, SUCCESS if exit_code == 0 else ERROR)
         lines = [
-            f"{run_mode} finished with exit code {exit_code}.",
+            banner,
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
             "",
             "Dashboard metrics",
-            f"Recoverable Space: {self._format_bytes(int(statistics.get('RecoverableBytes') or 0))}",
-            f"Recovered This Run: {self._format_bytes(int(statistics.get('RecoveredBytes') or 0))}",
-            f"Total Recovered: {self._format_bytes(int(statistics.get('TotalRecoveredBytes') or 0))}",
-            f"PC Health Score: {int(statistics.get('PCHealthScore') or 100)}/100",
+            f"Recoverable Space: {self._format_bytes(recoverable)}",
+            f"Recovered This Run: {self._format_bytes(recovered)}",
+            f"Total Recovered: {self._format_bytes(total_recovered)}",
+            f"PC Health Score: {health_score}/100",
             "",
             "Cleanup breakdown",
         ]
 
-        visible_categories = [
-            category for category in categories
-            if isinstance(category, dict) and category.get("Label")
-        ]
-        if not visible_categories:
-            lines.append("- No cleanup categories were reported.")
-        else:
-            for category in visible_categories:
-                label = category.get("Label", "Category")
-                status = category.get("Status") or "Reported"
-                estimated = self._format_bytes(int(category.get("EstimatedBytes") or 0))
-                recovered = self._format_bytes(int(category.get("ActualBytesRemoved") or 0))
-                reason = category.get("SkippedReason")
-                if reason:
-                    lines.append(f"- {label}: {status} ({reason})")
-                elif run_mode == "Preview":
-                    lines.append(f"- {label}: {status}, {estimated} recoverable")
-                else:
-                    lines.append(f"- {label}: {status}, {recovered} recovered")
+        grouped = self._group_cleanup_categories(categories)
+        metric_key = "estimated" if is_preview else "recovered"
+        for group_name in [
+            "Windows Temp",
+            "Browser Cache",
+            "Discord Cache",
+            "Teams Cache",
+            "Slack Cache",
+            "Zoom Cache",
+            "Recycle Bin",
+        ]:
+            group = grouped[group_name]
+            value = self._format_bytes(group[metric_key])
+            if group["notes"]:
+                lines.append(f"- {group_name}: {value} ({'; '.join(group['notes'])})")
+            else:
+                lines.append(f"- {group_name}: {value}")
+
+        total = recoverable if is_preview else recovered
+        lines.append(f"- Total: {self._format_bytes(total)}")
 
         paths = report.get("Paths") or {}
         lines.extend([
+            "",
+            "Protected by Default",
+            "Documents, Pictures, Downloads, Desktop, Videos, and Music are not cleaned by default.",
             "",
             "Safety",
             "Personal folders are protected by default. Registry cleaning and driver cleanup are not included.",
@@ -834,6 +940,71 @@ class BayouFindsCleanupGUI:
             "",
         ])
         return "\n".join(lines)
+
+    def _format_license_breakdown(self, report: dict, exit_code: int) -> str:
+        license_info = report.get("License") or {}
+        mode = license_info.get("Mode") or "Not checked"
+        message = license_info.get("Message") or "License check complete."
+        status = "Active" if str(mode).lower() in {"licensed", "trial"} else "Needs attention"
+        self._set_result_banner(f"License Status — {status}", SUCCESS if status == "Active" else WARNING)
+        return "\n".join([
+            f"License Status: {status}",
+            "",
+            f"Mode: {mode}",
+            f"Message: {message}",
+            f"Exit code: {exit_code}",
+            "",
+            "Cleanup dashboard metrics were not changed by this license check.",
+            "",
+        ])
+
+    def _group_cleanup_categories(self, categories: list) -> dict[str, dict]:
+        grouped = {
+            "Windows Temp": {"estimated": 0, "recovered": 0, "notes": []},
+            "Browser Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Discord Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Teams Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Slack Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Zoom Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Recycle Bin": {"estimated": 0, "recovered": 0, "notes": []},
+        }
+
+        for category in categories:
+            if not isinstance(category, dict):
+                continue
+
+            group_name = self._category_group_name(category)
+            if not group_name:
+                continue
+
+            grouped[group_name]["estimated"] += int(category.get("EstimatedBytes") or 0)
+            grouped[group_name]["recovered"] += int(category.get("ActualBytesRemoved") or 0)
+            reason = category.get("SkippedReason")
+            if reason and reason not in grouped[group_name]["notes"]:
+                grouped[group_name]["notes"].append(str(reason))
+
+        return grouped
+
+    def _category_group_name(self, category: dict) -> str | None:
+        category_id = str(category.get("Id") or "").lower()
+        label = str(category.get("Label") or "").lower()
+        combined = f"{category_id} {label}"
+
+        if "recycle" in combined:
+            return "Recycle Bin"
+        if "discord" in combined:
+            return "Discord Cache"
+        if "teams" in combined:
+            return "Teams Cache"
+        if "slack" in combined:
+            return "Slack Cache"
+        if "zoom" in combined:
+            return "Zoom Cache"
+        if any(token in combined for token in ["edge", "chrome", "browser", "internet", "web cache"]):
+            return "Browser Cache"
+        if any(token in combined for token in ["temp", "recent"]):
+            return "Windows Temp"
+        return None
 
     def _format_bytes(self, value: int) -> str:
         units = ["B", "KB", "MB", "GB", "TB"]
@@ -846,6 +1017,9 @@ class BayouFindsCleanupGUI:
         if unit_index == 0:
             return f"{int(amount)} {units[unit_index]}"
         return f"{amount:.1f} {units[unit_index]}"
+
+    def _format_gb(self, value: int) -> str:
+        return f"{max(value, 0) / (1024 ** 3):.2f} GB"
 
     def _health_color(self, score: int) -> str:
         if score >= 85:

@@ -1,5 +1,5 @@
-BayouFinds Cleanup Assistant v1.3.2 Beta
-========================================
+BayouFinds Cleanup Assistant v1.4.0 Release Candidate
+=====================================================
 
 Customer setup
 --------------
@@ -27,6 +27,8 @@ Run Safe Cleanup only after reviewing the scan results.
 Dashboard metrics
 -----------------
 
+The top dashboard cards show:
+
 - Recoverable Space
   Space found during Scan My PC. Preview mode does not delete files.
 
@@ -43,15 +45,41 @@ Dashboard statistics are saved in:
 
   Desktop\BayouFinds_Cleanup_Logs\cleanup_stats.json
 
+Results dashboard
+-----------------
+
+After Scan My PC, the app shows:
+
+  Scan Complete -- Recoverable Space Found
+
+After Run Safe Cleanup, the app shows:
+
+  Cleanup Complete -- Space Recovered
+
+The on-screen breakdown groups cleanup results into simple customer categories:
+
+- Windows Temp
+- Browser Cache
+- Discord Cache
+- Teams Cache
+- Slack Cache
+- Zoom Cache
+- Recycle Bin when applicable
+- Total
+
+Raw technical logs are still available from Open Reports / Logs.
+
 Safety guardrails
 -----------------
 
+Protected by default:
+
 - Documents are not deleted by default.
 - Pictures are not deleted by default.
+- Downloads are not deleted by default.
 - Desktop files are not deleted by default.
 - Videos are not deleted by default.
 - Music is not deleted by default.
-- Downloads are not deleted by default.
 - Registry cleaning is not included.
 - Driver cleanup is not included.
 
