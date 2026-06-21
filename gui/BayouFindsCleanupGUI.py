@@ -13,7 +13,7 @@ import webbrowser
 from datetime import datetime
 from math import ceil
 from pathlib import Path
-from tkinter import PhotoImage, Tk, Toplevel, filedialog, messagebox
+from tkinter import Frame, PhotoImage, Tk, Toplevel, filedialog, messagebox
 from tkinter import BOTH, END, LEFT, RIGHT, X, Y
 from tkinter import scrolledtext, ttk
 
@@ -41,21 +41,26 @@ SPLASH_HEIGHT = 360
 SPLASH_IMAGE_MAX_WIDTH = 584
 SPLASH_IMAGE_MAX_HEIGHT = 292
 
-BG = "#f5f2eb"
-SIDEBAR = "#0f3033"
-PANEL = "#fbfaf6"
-PANEL_ALT = "#e8f1ee"
-PANEL_SOFT = "#eef5f1"
-CARD = "#ffffff"
-TEXT = "#173034"
-MUTED = "#637a78"
-ACCENT = "#56b8bd"
-ACCENT_DARK = "#2f8e95"
-PRIMARY = "#76c8a2"
-PRIMARY_DARK = "#57aa84"
-SUCCESS = "#4f9f72"
-WARNING = "#c49a3a"
-ERROR = "#c86464"
+BG = "#071b1d"
+SIDEBAR = "#0a2528"
+PANEL = "#0d2a2e"
+PANEL_ALT = "#153c40"
+PANEL_SOFT = "#12353a"
+CARD = "#103338"
+CARD_SOFT = "#143d42"
+CARD_BORDER = "#2d6f70"
+CARD_HIGHLIGHT = "#5bd4c3"
+SHADOW = "#031012"
+GLOW = "#1e6967"
+TEXT = "#f5fbf8"
+MUTED = "#a8c7c2"
+ACCENT = "#6fdad0"
+ACCENT_DARK = "#2ea6a0"
+PRIMARY = "#77e0a5"
+PRIMARY_DARK = "#4bbf7c"
+SUCCESS = "#7ee7a6"
+WARNING = "#f1c96b"
+ERROR = "#ff7c7c"
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -187,6 +192,7 @@ class BayouFindsCleanupGUI:
         self.images: list[PhotoImage] = []
         self.buttons: list[ttk.Button] = []
         self.licensed_buttons: list[ttk.Button] = []
+        self.sidebar_buttons: dict[str, ttk.Button] = {}
 
         self._configure_styles()
         self._set_icon()
@@ -242,6 +248,7 @@ class BayouFindsCleanupGUI:
         style.theme_use("clam")
         style.configure("TFrame", background=BG)
         style.configure("Panel.TFrame", background=PANEL)
+        style.configure("Main.TFrame", background=BG)
         style.configure("Sidebar.TFrame", background=SIDEBAR)
         style.configure("SoftPanel.TFrame", background=PANEL_SOFT)
         style.configure("Card.TFrame", background=CARD)
@@ -288,8 +295,8 @@ class BayouFindsCleanupGUI:
             foreground="#0b2727",
             borderwidth=0,
             focusthickness=0,
-            font=("Segoe UI", 12, "bold"),
-            padding=(16, 14),
+            font=("Segoe UI", 14, "bold"),
+            padding=(22, 17),
         )
         style.map(
             "Primary.TButton",
@@ -298,8 +305,8 @@ class BayouFindsCleanupGUI:
         )
         style.configure(
             "Action.TButton",
-            background=ACCENT,
-            foreground="white",
+            background="#1d595c",
+            foreground=TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
@@ -307,30 +314,41 @@ class BayouFindsCleanupGUI:
         )
         style.map(
             "Action.TButton",
-            background=[("active", ACCENT_DARK), ("disabled", "#405465")],
-            foreground=[("disabled", "#b9c4ce")],
+            background=[("active", ACCENT_DARK), ("disabled", "#1d3438")],
+            foreground=[("disabled", "#77928e")],
         )
         style.configure(
             "Secondary.TButton",
-            background=PANEL_ALT,
+            background="#173f44",
             foreground=TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10),
             padding=(14, 10),
         )
-        style.map("Secondary.TButton", background=[("active", "#d8e8e3")])
+        style.map("Secondary.TButton", background=[("active", "#22595e"), ("disabled", "#172f33")])
         style.configure(
             "Sidebar.TButton",
             background=SIDEBAR,
-            foreground="#f8f1e5",
+            foreground="#d8efea",
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
             padding=(14, 10),
             anchor="w",
         )
-        style.map("Sidebar.TButton", background=[("active", "#19484b"), ("disabled", "#0f3033")])
+        style.map("Sidebar.TButton", background=[("active", "#16474b"), ("disabled", SIDEBAR)])
+        style.configure(
+            "SidebarActive.TButton",
+            background="#1c6969",
+            foreground="#f7fffb",
+            borderwidth=0,
+            focusthickness=0,
+            font=("Segoe UI", 10, "bold"),
+            padding=(14, 10),
+            anchor="w",
+        )
+        style.map("SidebarActive.TButton", background=[("active", "#237b79")])
 
     def _set_icon(self) -> None:
         icon_path = self._asset_path("app_icon.ico")
@@ -361,17 +379,55 @@ class BayouFindsCleanupGUI:
         self.root.config(menu=tk_menu)
         menu.destroy()
 
+    def _glass_card(
+        self,
+        parent,
+        fill: str = CARD,
+        padding: int = 14,
+        border: str = CARD_BORDER,
+        shadow: str = SHADOW,
+        glow: bool = False,
+    ) -> Frame:
+        backing = Frame(parent, bg=GLOW if glow else shadow)
+        body = Frame(
+            backing,
+            bg=fill,
+            highlightbackground=CARD_HIGHLIGHT if glow else border,
+            highlightcolor=CARD_HIGHLIGHT if glow else border,
+            highlightthickness=1,
+        )
+        body.pack(fill=BOTH, expand=True, padx=(0, 3), pady=(0, 3))
+        inner = Frame(body, bg=fill)
+        inner.pack(fill=BOTH, expand=True, padx=padding, pady=padding)
+        inner._glass_outer = backing  # type: ignore[attr-defined]
+        inner._glass_body = body  # type: ignore[attr-defined]
+        return inner
+
     def _build_layout(self) -> None:
-        outer = ttk.Frame(self.root)
+        outer = ttk.Frame(self.root, style="Main.TFrame")
         outer.pack(fill=BOTH, expand=True)
 
-        sidebar = ttk.Frame(outer, style="Sidebar.TFrame", padding=18)
-        sidebar.pack(side=LEFT, fill=Y)
-        sidebar.configure(width=210)
+        sidebar_shell = Frame(outer, bg=GLOW)
+        sidebar_shell.pack(side=LEFT, fill=Y, padx=(18, 0), pady=18)
+        sidebar_shell.configure(width=218)
+        sidebar_shell.pack_propagate(False)
+
+        sidebar = Frame(
+            sidebar_shell,
+            bg=SIDEBAR,
+            highlightbackground="#246063",
+            highlightcolor="#246063",
+            highlightthickness=1,
+        )
+        sidebar.pack(fill=BOTH, expand=True, padx=(0, 4), pady=(0, 4))
+        sidebar.configure(width=214)
         sidebar.pack_propagate(False)
 
-        ttk.Label(sidebar, text="BayouFinds", style="SidebarTitle.TLabel").pack(anchor="w")
-        ttk.Label(sidebar, text="Cleanup Assistant", style="SidebarMuted.TLabel").pack(anchor="w", pady=(2, 18))
+        nav_inner = Frame(sidebar, bg=SIDEBAR)
+        nav_inner.pack(fill=BOTH, expand=True, padx=16, pady=16)
+
+        ttk.Label(nav_inner, text="BayouFinds", style="SidebarTitle.TLabel").pack(anchor="w")
+        ttk.Label(nav_inner, text="Cleanup Assistant", style="SidebarMuted.TLabel").pack(anchor="w", pady=(2, 18))
 
         for label, command in [
             ("Home", lambda: self._set_view("Home")),
@@ -381,23 +437,23 @@ class BayouFindsCleanupGUI:
             ("License", self.license_status),
             ("Help", self.show_about),
         ]:
-            self._add_sidebar_button(sidebar, label, command)
+            self._add_sidebar_button(nav_inner, label, command)
 
-        ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill=BOTH, expand=True)
+        Frame(nav_inner, bg=SIDEBAR).pack(fill=BOTH, expand=True)
 
-        license_panel = ttk.Frame(sidebar, style="SoftPanel.TFrame", padding=10)
-        license_panel.pack(fill=X, pady=(0, 12))
+        license_panel = self._glass_card(nav_inner, fill="#11373b", padding=10, glow=True)
+        license_panel._glass_outer.pack(fill=X, pady=(0, 12))  # type: ignore[attr-defined]
         ttk.Label(
             license_panel,
             text="License",
-            background=PANEL_SOFT,
+            background="#11373b",
             foreground=MUTED,
             font=("Segoe UI", 9, "bold"),
         ).pack(anchor="w")
         self.license_value_label = ttk.Label(
             license_panel,
             text="Not checked",
-            background=PANEL_SOFT,
+            background="#11373b",
             foreground=WARNING,
             font=("Segoe UI", 12, "bold"),
         )
@@ -405,21 +461,21 @@ class BayouFindsCleanupGUI:
         ttk.Label(
             license_panel,
             text="Trial: scan and reports only",
-            background=PANEL_SOFT,
+            background="#11373b",
             foreground=MUTED,
             font=("Segoe UI", 8),
         ).pack(anchor="w", pady=(2, 0))
 
-        self._add_sidebar_button(sidebar, "Purchase License", self.purchase_license)
-        self._add_sidebar_button(sidebar, "Import License", self.import_license)
+        self._add_sidebar_button(nav_inner, "Purchase License", self.purchase_license)
+        self._add_sidebar_button(nav_inner, "Import License", self.import_license)
 
-        main = ttk.Frame(outer, padding=22)
+        main = ttk.Frame(outer, style="Main.TFrame", padding=(22, 18, 18, 18))
         main.pack(side=RIGHT, fill=BOTH, expand=True)
 
-        header = ttk.Frame(main)
+        header = ttk.Frame(main, style="Main.TFrame")
         header.pack(fill=X)
 
-        header_text = ttk.Frame(header)
+        header_text = ttk.Frame(header, style="Main.TFrame")
         header_text.pack(side=LEFT, fill=X, expand=True)
         self.view_title_label = ttk.Label(header_text, text="Home", style="Header.TLabel")
         self.view_title_label.pack(anchor="w")
@@ -439,28 +495,81 @@ class BayouFindsCleanupGUI:
         if header_image:
             ttk.Label(header, image=header_image, background=BG).pack(side=RIGHT, padx=(16, 0))
 
-        dashboard = ttk.Frame(main)
-        dashboard.pack(fill=X, pady=(18, 14))
+        dashboard = ttk.Frame(main, style="Main.TFrame")
+        dashboard.pack(fill=X, pady=(16, 12))
 
-        self.recoverable_value_label = self._add_metric_card(dashboard, "Recoverable Space", "Not scanned yet", 0, 0)
-        self.recovered_run_value_label = self._add_metric_card(dashboard, "Recovered This Run", "Not run yet", 0, 1)
-        self.total_recovered_value_label = self._add_metric_card(dashboard, "Total Recovered", "No cleanup yet", 0, 2)
-        self.health_score_value_label = self._add_metric_card(dashboard, "PC Health", "Not scanned yet", 0, 3)
+        self.recoverable_value_label = self._add_metric_card(
+            dashboard,
+            "◌",
+            "Recoverable Space",
+            "Not scanned yet",
+            "Scan first to estimate safe space.",
+            0,
+            0,
+        )
+        self.recovered_run_value_label = self._add_metric_card(
+            dashboard,
+            "✓",
+            "Recovered This Run",
+            "Not run yet",
+            "Cleanup totals appear here.",
+            0,
+            1,
+        )
+        self.total_recovered_value_label = self._add_metric_card(
+            dashboard,
+            "↟",
+            "Total Recovered",
+            "No cleanup yet",
+            "Saved over time on this PC.",
+            0,
+            2,
+        )
+        self.health_score_value_label = self._add_metric_card(
+            dashboard,
+            "♡",
+            "PC Health",
+            "Not scanned yet",
+            "A simple cleanup readiness score.",
+            0,
+            3,
+        )
         for column in range(4):
             dashboard.columnconfigure(column, weight=1)
 
-        action_row = ttk.Frame(main)
-        action_row.pack(fill=X, pady=(0, 14))
-        self._add_primary_button(action_row, "Scan My PC", self.scan_my_pc)
-        self._add_action_button(action_row, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
-        self._add_secondary_button(action_row, "Purchase License", self.purchase_license)
-        self._add_secondary_button(action_row, "Import License", self.import_license)
+        action_row = self._glass_card(main, fill=CARD_SOFT, padding=16, glow=True)
+        action_row._glass_outer.pack(fill=X, pady=(0, 12))  # type: ignore[attr-defined]
+        action_text = Frame(action_row, bg=CARD_SOFT)
+        action_text.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 16))
+        ttk.Label(
+            action_text,
+            text="Start with a safe scan",
+            background=CARD_SOFT,
+            foreground=TEXT,
+            font=("Segoe UI", 14, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            action_text,
+            text="Scan My PC checks for safe cleanup space. It does not delete files.",
+            background=CARD_SOFT,
+            foreground=MUTED,
+            font=("Segoe UI", 10),
+            wraplength=420,
+        ).pack(anchor="w", pady=(4, 0))
+        action_buttons = Frame(action_row, bg=CARD_SOFT)
+        action_buttons.pack(side=RIGHT, fill=X)
+        self._add_primary_button(action_buttons, "Scan My PC", self.scan_my_pc)
+        self._add_action_button(action_buttons, "Run Safe Cleanup", self.quick_cleanup, requires_license=True)
+        small_buttons = Frame(action_buttons, bg=CARD_SOFT)
+        small_buttons.pack(fill=X)
+        self._add_secondary_button(small_buttons, "Purchase License", self.purchase_license, side=LEFT)
+        self._add_secondary_button(small_buttons, "Import License", self.import_license, side=RIGHT)
 
-        trust_row = ttk.Frame(main)
-        trust_row.pack(fill=X, pady=(0, 14))
+        trust_row = ttk.Frame(main, style="Main.TFrame")
+        trust_row.pack(fill=X, pady=(0, 12))
 
-        protected = ttk.Frame(trust_row, style="Card.TFrame", padding=14)
-        protected.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
+        protected = self._glass_card(trust_row, fill=CARD, padding=14)
+        protected._glass_outer.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))  # type: ignore[attr-defined]
         ttk.Label(
             protected,
             text="Protected by Default",
@@ -470,15 +579,15 @@ class BayouFindsCleanupGUI:
         ).pack(anchor="w")
         ttk.Label(
             protected,
-            text="Documents  •  Pictures  •  Downloads\nDesktop  •  Videos  •  Music\nBrowser passwords",
+            text="✓ Documents    ✓ Pictures    ✓ Downloads    ✓ Desktop\n✓ Videos       ✓ Music       ✓ Browser Passwords\n✓ Saved Logins",
             background=CARD,
             foreground=TEXT,
             font=("Segoe UI", 10),
             justify="left",
         ).pack(anchor="w", pady=(8, 0))
 
-        guardrails = ttk.Frame(trust_row, style="Card.TFrame", padding=14)
-        guardrails.pack(side=RIGHT, fill=BOTH, expand=True, padx=(8, 0))
+        guardrails = self._glass_card(trust_row, fill=CARD, padding=14)
+        guardrails._glass_outer.pack(side=RIGHT, fill=BOTH, expand=True, padx=(8, 0))  # type: ignore[attr-defined]
         ttk.Label(
             guardrails,
             text="Safe Cleanup Rules",
@@ -512,16 +621,25 @@ class BayouFindsCleanupGUI:
         )
         self.recommendation_value_label.pack(anchor="w", pady=(0, 10))
 
+        results_card = self._glass_card(main, fill="#0f3034", padding=14)
+        results_card._glass_outer.pack(fill=BOTH, expand=True)  # type: ignore[attr-defined]
+
         self.result_banner_label = ttk.Label(
-            main,
+            results_card,
             text="Ready — Start with Scan My PC",
             style="Banner.TLabel",
         )
         self.result_banner_label.pack(fill=X, pady=(0, 10))
 
-        results_header = ttk.Frame(main)
+        results_header = Frame(results_card, bg="#0f3034")
         results_header.pack(fill=X)
-        ttk.Label(results_header, text="Results Summary", style="Subheader.TLabel").pack(side=LEFT)
+        ttk.Label(
+            results_header,
+            text="Results Summary",
+            background="#0f3034",
+            foreground=MUTED,
+            font=("Segoe UI", 11, "bold"),
+        ).pack(side=LEFT)
         ttk.Button(
             results_header,
             text="Open Reports / Logs",
@@ -536,20 +654,20 @@ class BayouFindsCleanupGUI:
         ).pack(side=RIGHT)
 
         self.status_label = ttk.Label(
-            main,
+            results_card,
             text="Ready",
-            background=BG,
+            background="#0f3034",
             foreground=MUTED,
             font=("Segoe UI", 10),
         )
         self.status_label.pack(anchor="w", pady=(4, 10))
 
         self.output = scrolledtext.ScrolledText(
-            main,
-            bg=CARD,
+            results_card,
+            bg="#0a2428",
             fg=TEXT,
             insertbackground=TEXT,
-            selectbackground=PANEL_ALT,
+            selectbackground="#246063",
             relief="flat",
             wrap="word",
             font=("Segoe UI", 10),
@@ -561,19 +679,70 @@ class BayouFindsCleanupGUI:
             "Start with Scan My PC.\n\nThe scan creates a clear report and does not delete files. Cleanup stays locked until an active license is installed.\n\nRaw technical logs stay behind Open Reports / Logs or View Technical Details.\n",
         )
         self.output.configure(state="disabled")
+        self._set_active_nav("Home")
 
-    def _add_metric_card(self, parent: ttk.Frame, label: str, value: str, row: int, column: int) -> ttk.Label:
-        card = ttk.Frame(parent, style="Card.TFrame", padding=12)
-        card.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
-        ttk.Label(card, text=label, style="CardTitle.TLabel").pack(anchor="w")
-        value_label = ttk.Label(card, text=value, style="CardValue.TLabel")
+    def _add_metric_card(
+        self,
+        parent: ttk.Frame,
+        symbol: str,
+        label: str,
+        value: str,
+        helper: str,
+        row: int,
+        column: int,
+    ) -> ttk.Label:
+        card = self._glass_card(parent, fill=CARD, padding=12, glow=column == 0)
+        card._glass_outer.grid(row=row, column=column, sticky="nsew", padx=5, pady=4)  # type: ignore[attr-defined]
+        ttk.Label(
+            card,
+            text=symbol,
+            background=CARD,
+            foreground=ACCENT if column == 0 else MUTED,
+            font=("Segoe UI", 16, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            card,
+            text=label,
+            background=CARD,
+            foreground=MUTED,
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w", pady=(6, 0))
+        value_label = ttk.Label(
+            card,
+            text=value,
+            background=CARD,
+            foreground=TEXT,
+            font=("Segoe UI", 16, "bold"),
+            wraplength=150,
+        )
         value_label.pack(anchor="w", pady=(4, 0))
+        ttk.Label(
+            card,
+            text=helper,
+            background=CARD,
+            foreground=MUTED,
+            font=("Segoe UI", 8),
+            wraplength=155,
+        ).pack(anchor="w", pady=(6, 0))
         return value_label
 
-    def _add_sidebar_button(self, parent: ttk.Frame, label: str, command) -> None:
-        ttk.Button(parent, text=label, style="Sidebar.TButton", command=command).pack(fill=X, pady=3)
+    def _add_sidebar_button(self, parent, label: str, command) -> None:
+        def run_command() -> None:
+            if label in {"Home", "Scan", "Cleanup", "Reports", "License", "Help"}:
+                self._set_active_nav(label)
+            command()
+
+        button = ttk.Button(parent, text=label, style="Sidebar.TButton", command=run_command)
+        button.pack(fill=X, pady=3)
+        if label in {"Home", "Scan", "Cleanup", "Reports", "License", "Help"}:
+            self.sidebar_buttons[label] = button
+
+    def _set_active_nav(self, label: str) -> None:
+        for button_label, button in self.sidebar_buttons.items():
+            button.configure(style="SidebarActive.TButton" if button_label == label else "Sidebar.TButton")
 
     def _set_view(self, view_name: str) -> None:
+        self._set_active_nav(view_name)
         subtitles = {
             "Home": "A calm, scan-first way to care for your PC.",
             "Reports": "Open reports, logs, and technical details when you need them.",
@@ -594,7 +763,7 @@ class BayouFindsCleanupGUI:
         elif view_name == "Help":
             self._set_result_banner("Protected by Default", SUCCESS)
             self._clear_output()
-            self._append_output("Protected by Default\n\nDocuments, Pictures, Downloads, Desktop, Videos, Music, and browser passwords are not cleaned by default.\n\nBayouFinds does not include registry cleaning or driver cleanup.\n")
+            self._append_output("Protected by Default\n\nDocuments, Pictures, Downloads, Desktop, Videos, Music, browser passwords, and saved logins are not cleaned by default.\n\nBayouFinds does not include registry cleaning or driver cleanup.\n")
 
     def _add_dashboard_row(self, parent: ttk.Frame, label: str, value: str) -> ttk.Label:
         row = ttk.Frame(parent, style="SoftPanel.TFrame")
@@ -619,21 +788,30 @@ class BayouFindsCleanupGUI:
     def _set_result_banner(self, text: str, foreground: str = TEXT) -> None:
         self.result_banner_label.configure(text=text, foreground=foreground)
 
-    def _add_primary_button(self, parent: ttk.Frame, label: str, command) -> None:
+    def _add_primary_button(self, parent, label: str, command, side: str | None = None) -> None:
         button = ttk.Button(parent, text=label, style="Primary.TButton", command=command)
-        button.pack(fill=X, pady=6)
+        pack_options = {"fill": X, "pady": 6}
+        if side:
+            pack_options.update({"side": side, "expand": True, "padx": 4})
+        button.pack(**pack_options)
         self.buttons.append(button)
 
-    def _add_action_button(self, parent: ttk.Frame, label: str, command, requires_license: bool = False) -> None:
+    def _add_action_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
         button = ttk.Button(parent, text=label, style="Action.TButton", command=command)
-        button.pack(fill=X, pady=5)
+        pack_options = {"fill": X, "pady": 5}
+        if side:
+            pack_options.update({"side": side, "expand": True, "padx": 4})
+        button.pack(**pack_options)
         self.buttons.append(button)
         if requires_license:
             self.licensed_buttons.append(button)
 
-    def _add_secondary_button(self, parent: ttk.Frame, label: str, command, requires_license: bool = False) -> None:
+    def _add_secondary_button(self, parent, label: str, command, requires_license: bool = False, side: str | None = None) -> None:
         button = ttk.Button(parent, text=label, style="Secondary.TButton", command=command)
-        button.pack(fill=X, pady=5)
+        pack_options = {"fill": X, "pady": 5}
+        if side:
+            pack_options.update({"side": side, "expand": True, "padx": 4})
+        button.pack(**pack_options)
         self.buttons.append(button)
         if requires_license:
             self.licensed_buttons.append(button)
@@ -827,6 +1005,7 @@ class BayouFindsCleanupGUI:
         )
 
     def quick_cleanup(self) -> None:
+        self._set_active_nav("Cleanup")
         if not self._has_active_license():
             self._show_license_required_prompt()
             return
@@ -851,6 +1030,7 @@ class BayouFindsCleanupGUI:
         self.run_cleanup("Deep Windows Check", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
 
     def scan_my_pc(self) -> None:
+        self._set_active_nav("Scan")
         self.run_cleanup("Scan My PC", ["-NoMenu", "-Mode", "Preview"])
 
     def repair_windows_files(self) -> None:
@@ -861,6 +1041,7 @@ class BayouFindsCleanupGUI:
         self.run_cleanup("Repair Windows Files", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
 
     def license_status(self) -> None:
+        self._set_active_nav("License")
         self.run_cleanup("License Status", ["-NoMenu", "-Mode", "LicenseCheck"])
 
     def run_cleanup(self, action_name: str, args: list[str]) -> None:

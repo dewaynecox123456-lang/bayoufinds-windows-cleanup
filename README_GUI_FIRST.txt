@@ -167,6 +167,7 @@ Protected by default:
 - Videos are not deleted by default.
 - Music is not deleted by default.
 - Browser passwords are not deleted by default.
+- Saved logins are not deleted by default.
 - Registry cleaning is not included.
 - Driver cleanup is not included.
 
