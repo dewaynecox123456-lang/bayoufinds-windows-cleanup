@@ -36,6 +36,10 @@ CARD_PADDING = 24
 CARD_MARGIN = 24
 SIDEBAR_WIDTH = 260
 CONTENT_GAP = 22
+PRIMARY_BUTTON_WIDTH = 248
+PRIMARY_BUTTON_HEIGHT = 62
+ACTION_BUTTON_WIDTH = 248
+ACTION_BUTTON_HEIGHT = 48
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
 HEADER_IMAGE_MAX_HEIGHT = 40
 MASCOT_IMAGE_MAX_WIDTH = 170
@@ -96,6 +100,12 @@ def draw_round_rect(canvas: Canvas, x1: int, y1: int, x2: int, y2: int, radius: 
         y1,
     ]
     return canvas.create_polygon(points, smooth=True, splinesteps=20, **kwargs)
+
+
+def clamp(value: int, minimum: int, maximum: int) -> int:
+    if maximum < minimum:
+        return minimum
+    return max(minimum, min(value, maximum))
 
 
 class GlassCard(Frame):
@@ -751,7 +761,13 @@ class BayouFindsCleanupGUI:
         disabled_foreground: str = "#77928e",
         font: tuple = ("Segoe UI", 10, "bold"),
         register: bool = True,
+        bounds: tuple[int, int, int, int] | None = None,
     ) -> GlassButton:
+        if bounds:
+            bound_x, bound_y, bound_w, bound_h = bounds
+            x = clamp(x, bound_x, bound_x + bound_w - width)
+            y = clamp(y, bound_y, bound_y + bound_h - height)
+
         button = GlassButton(
             self.dashboard_canvas,
             text=text,
@@ -847,6 +863,7 @@ class BayouFindsCleanupGUI:
                 glow=False,
                 font=("Segoe UI", 10, "bold"),
                 register=False,
+                bounds=(sidebar_cx, sidebar_cy, sidebar_cw, sidebar_ch),
             )
             self.sidebar_buttons[label] = button
 
@@ -898,6 +915,7 @@ class BayouFindsCleanupGUI:
             "#22595e",
             foreground=TEXT,
             font=("Segoe UI", 9, "bold"),
+            bounds=(side_inner_x, margin, side_inner_w, bottom - margin),
         )
         self._canvas_button(
             side_inner_x,
@@ -911,6 +929,7 @@ class BayouFindsCleanupGUI:
             foreground=TEXT,
             glow=True,
             font=("Segoe UI", 9, "bold"),
+            bounds=(side_inner_x, margin, side_inner_w, bottom - margin),
         )
         reminder_cx, reminder_cy, reminder_cw, reminder_ch = self._canvas_panel(
             side_inner_x,
@@ -1048,10 +1067,17 @@ class BayouFindsCleanupGUI:
             font=("Segoe UI", 11),
             width=max(220, start_cw - 300),
         )
-        action_button_w = 248
+        action_button_w = ACTION_BUTTON_WIDTH
         button_x = min(start_cx + start_cw - action_button_w, content_x + start_w - CARD_PADDING - action_button_w)
         button_x = max(start_cx, button_x)
-        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=button_x, y=start_cy + 10)
+        self._add_primary_button(
+            self.dashboard_canvas,
+            "Scan My PC",
+            self.scan_my_pc,
+            x=button_x,
+            y=start_cy + 10,
+            bounds=(start_cx, start_cy, start_cw, start_ch),
+        )
         self._add_action_button(
             self.dashboard_canvas,
             "Run Safe Cleanup",
@@ -1059,6 +1085,7 @@ class BayouFindsCleanupGUI:
             requires_license=True,
             x=button_x,
             y=start_cy + 80,
+            bounds=(start_cx, start_cy, start_cw, start_ch),
         )
 
         protected_x = content_x + start_w + gap
@@ -1135,6 +1162,7 @@ class BayouFindsCleanupGUI:
             "#22595e",
             foreground=TEXT,
             font=("Segoe UI", 9, "bold"),
+            bounds=(results_cx, results_cy, results_cw, results_ch),
         )
         self._set_active_nav("Home")
         self._sync_license_labels()
@@ -1287,13 +1315,14 @@ class BayouFindsCleanupGUI:
         side: str | None = None,
         x: int | None = None,
         y: int | None = None,
+        bounds: tuple[int, int, int, int] | None = None,
     ) -> None:
         button = GlassButton(
             parent,
             text=label,
             command=command,
-            width=248,
-            height=62,
+            width=PRIMARY_BUTTON_WIDTH,
+            height=PRIMARY_BUTTON_HEIGHT,
             fill=PRIMARY,
             active_fill=PRIMARY_DARK,
             foreground="#082320",
@@ -1305,7 +1334,11 @@ class BayouFindsCleanupGUI:
             bg=CARD_SOFT,
         )
         if isinstance(parent, Canvas) and x is not None and y is not None:
-            parent.create_window(x, y, window=button, anchor="nw", width=248, height=62)
+            if bounds:
+                bound_x, bound_y, bound_w, bound_h = bounds
+                x = clamp(x, bound_x, bound_x + bound_w - PRIMARY_BUTTON_WIDTH)
+                y = clamp(y, bound_y, bound_y + bound_h - PRIMARY_BUTTON_HEIGHT)
+            parent.create_window(x, y, window=button, anchor="nw", width=PRIMARY_BUTTON_WIDTH, height=PRIMARY_BUTTON_HEIGHT)
             self.buttons.append(button)
             return
         pack_options = {"fill": X, "pady": 6}
@@ -1323,13 +1356,14 @@ class BayouFindsCleanupGUI:
         side: str | None = None,
         x: int | None = None,
         y: int | None = None,
+        bounds: tuple[int, int, int, int] | None = None,
     ) -> None:
         button = GlassButton(
             parent,
             text=label,
             command=command,
-            width=248,
-            height=48,
+            width=ACTION_BUTTON_WIDTH,
+            height=ACTION_BUTTON_HEIGHT,
             fill="#1f595d",
             active_fill="#28777a",
             foreground=TEXT,
@@ -1341,7 +1375,11 @@ class BayouFindsCleanupGUI:
             bg=CARD_SOFT,
         )
         if isinstance(parent, Canvas) and x is not None and y is not None:
-            parent.create_window(x, y, window=button, anchor="nw", width=248, height=48)
+            if bounds:
+                bound_x, bound_y, bound_w, bound_h = bounds
+                x = clamp(x, bound_x, bound_x + bound_w - ACTION_BUTTON_WIDTH)
+                y = clamp(y, bound_y, bound_y + bound_h - ACTION_BUTTON_HEIGHT)
+            parent.create_window(x, y, window=button, anchor="nw", width=ACTION_BUTTON_WIDTH, height=ACTION_BUTTON_HEIGHT)
             self.buttons.append(button)
             if requires_license:
                 self.licensed_buttons.append(button)
