@@ -524,3 +524,19 @@ class BayouFindsCleanupCTk:
         button = self._button(self.action_buttons_frame, text, command, fg_color, hover_color, text_color, 42, requires_license)
         button.grid(row=len(self.page_buttons), column=0, sticky="ew", pady=4)
         self.page_buttons.append(button)
+
+def main() -> None:
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("green")
+
+    root = ctk.CTk()
+    root.title(WINDOW_TITLE)
+    root.geometry(WINDOW_SIZE)
+    root.minsize(WINDOW_WIDTH, WINDOW_HEIGHT)
+
+    BayouFindsCleanupCTk(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
