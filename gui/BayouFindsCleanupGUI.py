@@ -28,9 +28,9 @@ APP_NAME = "BayouFinds Cleanup Assistant"
 APP_VERSION = "v1.5.0"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
 PURCHASE_URL = "https://bayoufinds.com/b/y3OJr"
-WINDOW_SIZE = "1040x700"
-WINDOW_WIDTH = 1040
-WINDOW_HEIGHT = 700
+WINDOW_SIZE = "1200x760"
+WINDOW_WIDTH = 1200
+WINDOW_HEIGHT = 760
 CONTENT_PADDING = 18
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
 HEADER_IMAGE_MAX_HEIGHT = 40
@@ -796,15 +796,15 @@ class BayouFindsCleanupGUI:
         self.dashboard_canvas.delete("all")
 
         margin = 24
-        gap = 20
-        sidebar_w = 232
+        gap = 22
+        sidebar_w = 260
         content_x = margin + sidebar_w + gap
         content_w = width - content_x - margin
         bottom = height - margin
 
         self._canvas_panel(margin, margin, sidebar_w, height - (margin * 2), fill=SIDEBAR, radius=34, glow=True, border="#2c7272")
-        self._canvas_text(margin + 28, margin + 28, "BayouFinds", fill=TEXT, font=("Segoe UI", 18, "bold"))
-        self._canvas_text(margin + 28, margin + 56, "Cleanup Assistant", fill=MUTED, font=("Segoe UI", 10))
+        self._canvas_text(margin + 30, margin + 30, "BayouFinds", fill=TEXT, font=("Segoe UI", 20, "bold"))
+        self._canvas_text(margin + 30, margin + 62, "Cleanup Assistant", fill=MUTED, font=("Segoe UI", 10))
 
         nav_items = [
             ("Home", lambda: self._set_view("Home")),
@@ -817,11 +817,11 @@ class BayouFindsCleanupGUI:
         for index, (label, command) in enumerate(nav_items):
             button = self._canvas_button(
                 margin + 26,
-                margin + 100 + (index * 50),
+                margin + 112 + (index * 52),
                 label,
                 command,
                 sidebar_w - 52,
-                42,
+                44,
                 SIDEBAR,
                 "#1d6868",
                 foreground="#e8fbf6",
@@ -831,64 +831,90 @@ class BayouFindsCleanupGUI:
             )
             self.sidebar_buttons[label] = button
 
-        license_y = bottom - 214
-        self._canvas_panel(margin + 24, license_y, sidebar_w - 48, 112, fill="#11373b", radius=22, glow=True)
-        self._canvas_text(margin + 44, license_y + 20, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        protected_reminder_h = 76
+        button_h = 40
+        side_inner_x = margin + 24
+        side_inner_w = sidebar_w - 48
+        protected_y = bottom - protected_reminder_h
+        purchase_y = protected_y - 52
+        import_y = purchase_y - 48
+        license_y = import_y - 130
+
+        self._canvas_panel(side_inner_x, license_y, side_inner_w, 112, fill="#11373b", radius=22, glow=True)
+        self._canvas_text(side_inner_x + 20, license_y + 20, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
         self.license_value_label = self._canvas_text(
-            margin + 44,
+            side_inner_x + 20,
             license_y + 44,
             "● LICENSE REQUIRED",
             fill=ERROR,
             font=("Segoe UI", 10, "bold"),
-            width=sidebar_w - 88,
+            width=side_inner_w - 40,
         )
         self._canvas_text(
-            margin + 44,
+            side_inner_x + 20,
             license_y + 78,
             "Trial mode:\nscan and reports only",
             fill=MUTED,
             font=("Segoe UI", 8),
-            width=sidebar_w - 88,
+            width=side_inner_w - 40,
         )
 
         self._canvas_button(
-            margin + 24,
-            license_y + 128,
+            side_inner_x,
+            import_y,
+            "Import License",
+            self.import_license,
+            side_inner_w,
+            button_h,
+            "#173f44",
+            "#22595e",
+            foreground=TEXT,
+            font=("Segoe UI", 9, "bold"),
+        )
+        self._canvas_button(
+            side_inner_x,
+            purchase_y,
             "🛒 Purchase License",
             self.purchase_license,
-            sidebar_w - 48,
-            40,
+            side_inner_w,
+            button_h,
             "#173f44",
             "#22595e",
             foreground=TEXT,
             glow=True,
             font=("Segoe UI", 9, "bold"),
         )
-        self._canvas_button(
-            margin + 24,
-            license_y + 176,
-            "Import License",
-            self.import_license,
-            sidebar_w - 48,
-            36,
-            "#173f44",
-            "#22595e",
-            foreground=TEXT,
-            font=("Segoe UI", 9, "bold"),
+        self._canvas_panel(side_inner_x, protected_y, side_inner_w, protected_reminder_h, fill="#0f3034", radius=20)
+        self._canvas_text(side_inner_x + 18, protected_y + 16, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 9, "bold"))
+        self._canvas_text(
+            side_inner_x + 18,
+            protected_y + 38,
+            "Personal folders and saved logins stay protected.",
+            fill=MUTED,
+            font=("Segoe UI", 8),
+            width=side_inner_w - 36,
         )
 
-        self.view_title_label = self._canvas_text(content_x, margin + 10, "Home", fill=TEXT, font=("Segoe UI", 26, "bold"))
+        self.view_title_label = self._canvas_text(
+            content_x,
+            margin + 10,
+            "Welcome to BayouFinds Cleanup Assistant",
+            fill=TEXT,
+            font=("Segoe UI", 25, "bold"),
+            width=content_w - 190,
+        )
         self.view_subtitle_label = self._canvas_text(
-            content_x + 2,
-            margin + 50,
-            "A calm, scan-first way to care for your PC.",
+            content_x,
+            margin + 54,
+            "Scan your PC to find and safely remove unnecessary files.",
             fill=MUTED,
-            font=("Segoe UI", 11),
+            font=("Segoe UI", 12),
             width=max(360, content_w - 220),
         )
 
-        self._canvas_text(content_x + content_w - 184, margin + 12, APP_VERSION, fill=MUTED, font=("Segoe UI", 10, "bold"))
-        self._canvas_text(content_x + content_w - 184, margin + 34, "Premium glass dashboard", fill=ACCENT, font=("Segoe UI", 10), width=176)
+        badge_w = 96
+        self._canvas_panel(content_x + content_w - badge_w, margin + 8, badge_w, 38, fill="#11373b", radius=18, glow=False)
+        self._canvas_text(content_x + content_w - (badge_w // 2), margin + 18, APP_VERSION, fill=ACCENT, font=("Segoe UI", 10, "bold"), anchor="n")
 
         metrics = [
             ("◌", "Recoverable Space", "Not scanned yet", "Scan first to estimate safe space."),
@@ -898,8 +924,8 @@ class BayouFindsCleanupGUI:
         ]
         metric_labels = []
         metric_gap = 16
-        metric_y = margin + 84
-        metric_h = 138
+        metric_y = margin + 104
+        metric_h = 136
         metric_w = max(154, (content_w - (metric_gap * 3)) // 4)
         for index, (symbol, label, value, helper) in enumerate(metrics):
             x = content_x + (index * (metric_w + metric_gap))
@@ -918,48 +944,63 @@ class BayouFindsCleanupGUI:
             self.health_score_value_label,
         ) = metric_labels
 
-        mid_y = metric_y + metric_h + 24
-        start_w = max(420, int(content_w * 0.58))
-        license_w = content_w - start_w - gap
-        if license_w < 260:
-            start_w = content_w - 260 - gap
-            license_w = 260
-        start_h = 156
-        self._canvas_panel(content_x, mid_y, start_w, start_h, fill=CARD_SOFT, radius=28, glow=True)
-        self._canvas_text(content_x + 28, mid_y + 24, "Start with a safe scan", fill=TEXT, font=("Segoe UI", 18, "bold"))
+        status_y = metric_y + metric_h + 22
+        status_h = 72
+        self._canvas_panel(content_x, status_y, content_w, status_h, fill="#0f3034", radius=24)
+        status_col_w = content_w // 3
+        self._canvas_text(content_x + 24, status_y + 16, "Last Scan", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self.last_scan_value_label = self._canvas_text(content_x + 24, status_y + 40, "Not run yet", fill=TEXT, font=("Segoe UI", 11, "bold"), width=status_col_w - 44)
+        self._canvas_text(content_x + status_col_w + 24, status_y + 16, "Recommendation", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self.recommendation_value_label = self._canvas_text(
+            content_x + status_col_w + 24,
+            status_y + 40,
+            "Start with Scan My PC",
+            fill=TEXT,
+            font=("Segoe UI", 11, "bold"),
+            width=status_col_w - 44,
+        )
+        self._canvas_text(content_x + (status_col_w * 2) + 24, status_y + 16, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self.status_license_value_label = self._canvas_text(
+            content_x + (status_col_w * 2) + 24,
+            status_y + 40,
+            "● LICENSE REQUIRED",
+            fill=ERROR,
+            font=("Segoe UI", 11, "bold"),
+            width=status_col_w - 44,
+        )
+
+        middle_y = status_y + status_h + 22
+        middle_h = 180
+        start_w = max(430, int(content_w * 0.52))
+        protected_w = content_w - start_w - gap
+        if protected_w < 360:
+            protected_w = 360
+            start_w = content_w - protected_w - gap
+
+        self._canvas_panel(content_x, middle_y, start_w, middle_h, fill=CARD_SOFT, radius=28, glow=True)
+        self._canvas_text(content_x + 30, middle_y + 26, "Start Here", fill=TEXT, font=("Segoe UI", 19, "bold"))
         self._canvas_text(
-            content_x + 28,
-            mid_y + 60,
-            "Scan My PC checks for safe temporary files and app caches. It does not delete files.",
+            content_x + 30,
+            middle_y + 66,
+            "Scan first. Cleanup stays locked until your license is active.",
             fill=MUTED,
             font=("Segoe UI", 11),
             width=max(220, start_w - 320),
         )
-        button_x = content_x + start_w - 278
-        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=button_x, y=mid_y + 28)
+        button_x = content_x + start_w - 284
+        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=button_x, y=middle_y + 34)
         self._add_action_button(
             self.dashboard_canvas,
             "Run Safe Cleanup",
             self.quick_cleanup,
             requires_license=True,
             x=button_x,
-            y=mid_y + 94,
+            y=middle_y + 104,
         )
 
-        license_x = content_x + start_w + gap
-        self._canvas_panel(license_x, mid_y, license_w, start_h, fill="#11373b", radius=28, glow=False)
-        self._canvas_text(license_x + 24, mid_y + 22, "License", fill=MUTED, font=("Segoe UI", 10, "bold"))
-        self._canvas_text(license_x + 24, mid_y + 50, "Cleanup unlocks after activation.", fill=TEXT, font=("Segoe UI", 12, "bold"), width=license_w - 48)
-        self._canvas_text(license_x + 24, mid_y + 90, "Trial mode keeps scanning and reports available.", fill=MUTED, font=("Segoe UI", 10), width=license_w - 48)
-
-        lower_y = mid_y + start_h + 24
-        lower_h = max(200, bottom - lower_y - 54)
-        protected_w = max(340, int(content_w * 0.43))
-        results_x = content_x + protected_w + gap
-        results_w = content_w - protected_w - gap
-
-        self._canvas_panel(content_x, lower_y, protected_w, lower_h, fill=CARD, radius=28)
-        self._canvas_text(content_x + 26, lower_y + 26, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 14, "bold"))
+        protected_x = content_x + start_w + gap
+        self._canvas_panel(protected_x, middle_y, protected_w, middle_h, fill=CARD, radius=28)
+        self._canvas_text(protected_x + 28, middle_y + 24, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 15, "bold"))
         protected_items = [
             "✓ Documents",
             "✓ Pictures",
@@ -971,24 +1012,27 @@ class BayouFindsCleanupGUI:
             "✓ Saved Logins",
         ]
         for index, item in enumerate(protected_items):
-            x = content_x + 26 if index % 2 == 0 else content_x + max(172, protected_w // 2)
-            y = lower_y + 64 + ((index // 2) * 28)
-            self._canvas_text(x, y, item, fill=TEXT, font=("Segoe UI", 10, "bold"), width=max(134, protected_w // 2 - 34))
-        self.last_scan_value_label = self._canvas_text(content_x + 26, lower_y + lower_h - 34, "Last Scan: Not run yet", fill=MUTED, font=("Segoe UI", 9))
+            x = protected_x + 28 if index % 2 == 0 else protected_x + max(186, protected_w // 2)
+            y = middle_y + 66 + ((index // 2) * 28)
+            self._canvas_text(x, y, item, fill=TEXT, font=("Segoe UI", 10, "bold"), width=max(142, protected_w // 2 - 38))
 
-        self._canvas_panel(results_x, lower_y, results_w, lower_h, fill="#0f3034", radius=28, glow=False)
+        results_y = middle_y + middle_h + 22
+        results_h = max(142, bottom - results_y)
+        results_x = content_x
+        results_w = content_w
+        self._canvas_panel(results_x, results_y, results_w, results_h, fill="#0f3034", radius=28, glow=False)
         self.result_banner_label = self._canvas_text(
-            results_x + 26,
-            lower_y + 24,
+            results_x + 30,
+            results_y + 26,
             "Scan Results",
             fill=TEXT,
             font=("Segoe UI", 16, "bold"),
-            width=results_w - 52,
+            width=results_w - 260,
         )
-        self.status_label = self._canvas_text(results_x + 26, lower_y + 56, "Ready", fill=MUTED, font=("Segoe UI", 10, "bold"))
+        self.status_label = self._canvas_text(results_x + 30, results_y + 58, "Ready", fill=MUTED, font=("Segoe UI", 10, "bold"))
         output_item = self.dashboard_canvas.create_text(
-            results_x + 26,
-            lower_y + 94,
+            results_x + 30,
+            results_y + 92,
             text=(
                 "No scan has been run yet.\n\n"
                 "Click Scan My PC to check for safe temporary files and app caches."
@@ -1000,8 +1044,8 @@ class BayouFindsCleanupGUI:
         )
         self.output = CanvasOutputProxy(self.dashboard_canvas, output_item)
         self._canvas_button(
-            results_x + 26,
-            lower_y + lower_h - 56,
+            results_x + results_w - 214,
+            results_y + 30,
             "View Technical Details",
             self.view_technical_details,
             170,
@@ -1011,28 +1055,8 @@ class BayouFindsCleanupGUI:
             foreground=TEXT,
             font=("Segoe UI", 9, "bold"),
         )
-        self._canvas_button(
-            results_x + 208,
-            lower_y + lower_h - 56,
-            "Open Reports",
-            self.open_log_folder,
-            132,
-            40,
-            "#173f44",
-            "#22595e",
-            foreground=TEXT,
-            font=("Segoe UI", 9, "bold"),
-        )
-
-        self.recommendation_value_label = self._canvas_text(
-            content_x,
-            bottom - 10,
-            "Recommendation: Start with Scan My PC",
-            fill=TEXT,
-            font=("Segoe UI", 9, "bold"),
-            width=content_w,
-        )
         self._set_active_nav("Home")
+        self._sync_license_labels()
         self._apply_license_button_state()
 
     def _add_metric_card(
@@ -1113,12 +1137,13 @@ class BayouFindsCleanupGUI:
     def _set_view(self, view_name: str) -> None:
         self._set_active_nav(view_name)
         subtitles = {
-            "Home": "A calm, scan-first way to care for your PC.",
+            "Home": "Scan your PC to find and safely remove unnecessary files.",
             "Reports": "Open reports, logs, and technical details when you need them.",
             "License": "Activate cleanup when you are ready to recover space.",
             "Help": "Safety-first cleanup with personal files protected.",
         }
-        self.view_title_label.configure(text=view_name)
+        title = "Welcome to BayouFinds Cleanup Assistant" if view_name == "Home" else view_name
+        self.view_title_label.configure(text=title)
         self.view_subtitle_label.configure(text=subtitles.get(view_name, "Scan first, then choose cleanup."))
 
         if view_name == "Reports":
@@ -1156,6 +1181,22 @@ class BayouFindsCleanupGUI:
 
     def _set_result_banner(self, text: str, foreground: str = TEXT) -> None:
         self.result_banner_label.configure(text=text, foreground=foreground)
+
+    def _sync_license_labels(self) -> None:
+        if self.license_state == "active":
+            text = "● ACTIVE"
+            color = SUCCESS
+        elif self.license_state == "trial":
+            text = "● TRIAL MODE"
+            color = WARNING
+        else:
+            text = "● LICENSE REQUIRED"
+            color = ERROR
+
+        if hasattr(self, "license_value_label"):
+            self.license_value_label.configure(text=text, foreground=color)
+        if hasattr(self, "status_license_value_label"):
+            self.status_license_value_label.configure(text=text, foreground=color)
 
     def _add_primary_button(
         self,
@@ -1278,23 +1319,23 @@ class BayouFindsCleanupGUI:
         self.license_state = state
 
         if state == "active":
-            self._set_dashboard_value(self.license_value_label, "● ACTIVE", SUCCESS)
+            self._sync_license_labels()
             self._set_result_banner("License Active — Cleanup enabled", SUCCESS)
-            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Scan, then run cleanup", TEXT)
+            self._set_dashboard_value(self.recommendation_value_label, "Scan, then run cleanup", TEXT)
         elif state == "trial":
-            self._set_dashboard_value(self.license_value_label, "● TRIAL MODE", WARNING)
+            self._sync_license_labels()
             self._set_result_banner("Trial Mode — Scan and reports enabled", WARNING)
             self._set_dashboard_value(
                 self.recommendation_value_label,
-                "Recommendation: Purchase a license to clean",
+                "Purchase a license to clean",
                 WARNING,
             )
         else:
-            self._set_dashboard_value(self.license_value_label, "● LICENSE REQUIRED", ERROR)
+            self._sync_license_labels()
             self._set_result_banner("License Required — Scan and reports enabled", WARNING)
             self._set_dashboard_value(
                 self.recommendation_value_label,
-                "Recommendation: Purchase or import a license",
+                "Purchase or import a license",
                 WARNING,
             )
 
@@ -1644,45 +1685,45 @@ class BayouFindsCleanupGUI:
 
     def _update_dashboard_for_start(self, action_name: str) -> None:
         if action_name == "Scan My PC":
-            self._set_dashboard_value(self.last_scan_value_label, "Last Scan: Running now", ACCENT)
+            self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
             self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
             self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
-            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Wait for scan results", TEXT)
+            self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
         elif action_name == "Run Safe Cleanup":
             self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
-            self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Cleaning safe temporary files", TEXT)
+            self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
         elif action_name == "License Status":
             self._set_dashboard_value(self.license_value_label, "Checking", ACCENT)
+            if hasattr(self, "status_license_value_label"):
+                self._set_dashboard_value(self.status_license_value_label, "Checking", ACCENT)
             self.last_license_mode = None
 
     def _update_dashboard_for_done(self, action_name: str | None, exit_code: int) -> None:
         now = datetime.now().strftime("%I:%M %p").lstrip("0")
         if action_name == "Scan My PC":
             if exit_code == 0:
-                self._set_dashboard_value(self.last_scan_value_label, f"Last Scan: Completed at {now}", SUCCESS)
+                self._set_dashboard_value(self.last_scan_value_label, f"Completed at {now}", SUCCESS)
                 self._set_dashboard_value(
                     self.recommendation_value_label,
-                    "Recommendation: Review results, then run cleanup",
+                    "Review results, then run cleanup",
                     TEXT,
                 )
             else:
-                self._set_dashboard_value(self.last_scan_value_label, "Last Scan: Needs attention", ERROR)
-                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Open the report before cleanup", WARNING)
+                self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
+                self._set_dashboard_value(self.recommendation_value_label, "Open the report before cleanup", WARNING)
         elif action_name == "Run Safe Cleanup":
             if exit_code == 0:
-                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Cleanup complete", SUCCESS)
+                self._set_dashboard_value(self.recommendation_value_label, "Cleanup complete", SUCCESS)
             else:
-                self._set_dashboard_value(self.recommendation_value_label, "Recommendation: Review the report", WARNING)
+                self._set_dashboard_value(self.recommendation_value_label, "Review the report", WARNING)
         elif action_name == "License Status":
             if exit_code == 0 and self.last_license_mode == "licensed":
-                self._set_dashboard_value(self.license_value_label, "● ACTIVE", SUCCESS)
                 self.license_state = "active"
             elif exit_code == 0 and self.last_license_mode == "trial":
-                self._set_dashboard_value(self.license_value_label, "● TRIAL MODE", WARNING)
                 self.license_state = "trial"
             else:
-                self._set_dashboard_value(self.license_value_label, "● LICENSE REQUIRED", ERROR)
                 self.license_state = "required"
+            self._sync_license_labels()
             self._apply_license_button_state()
 
     def _show_structured_breakdown(self, action_name: str | None, exit_code: int) -> None:
