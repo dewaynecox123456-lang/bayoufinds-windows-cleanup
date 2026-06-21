@@ -236,7 +236,11 @@ Developer source launch
 From the repository root:
 
   python -m pip install customtkinter
-  python gui\BayouFindsCleanupGUI.py
+  python gui\BayouFindsCleanupCTk.py
+
+The production GUI entry point is:
+
+  gui\BayouFindsCleanupCTk.py
 
 PyInstaller build
 -----------------

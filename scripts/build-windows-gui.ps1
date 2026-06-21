@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
-$GuiScript = Join-Path -Path $Root -ChildPath "gui\BayouFindsCleanupGUI.py"
+$GuiScript = Join-Path -Path $Root -ChildPath "gui\BayouFindsCleanupCTk.py"
 $Icon = Join-Path -Path $Root -ChildPath "assets\app_icon.ico"
 $CleanupScript = Join-Path -Path $Root -ChildPath "BayouFinds_Windows_Cleanup.ps1"
 $Readme = Join-Path -Path $Root -ChildPath "README_GUI_FIRST.txt"
