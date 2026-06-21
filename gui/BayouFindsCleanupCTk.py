@@ -29,8 +29,8 @@ APP_NAME = "BayouFinds Cleanup Assistant"
 APP_VERSION = "v1.5.0"
 WINDOW_TITLE = f"{APP_NAME} {APP_VERSION}"
 PURCHASE_URL = "https://bayoufinds.com/b/y3OJr"
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 760
+WINDOW_WIDTH = 1180
+WINDOW_HEIGHT = 700
 WINDOW_SIZE = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
 
 BG = "#071b1d"
@@ -204,10 +204,10 @@ class BayouFindsCleanupCTk:
         sidebar.grid_rowconfigure(8, weight=1)
 
         ctk.CTkLabel(sidebar, text="BayouFinds", text_color=TEXT, font=("Segoe UI", 22, "bold")).grid(
-            row=0, column=0, sticky="w", padx=22, pady=(24, 0)
+            row=0, column=0, sticky="w", padx=22, pady=(20, 0)
         )
         ctk.CTkLabel(sidebar, text="Cleanup Assistant", text_color=MUTED, font=("Segoe UI", 11)).grid(
-            row=1, column=0, sticky="w", padx=22, pady=(0, 20)
+            row=1, column=0, sticky="w", padx=22, pady=(0, 16)
         )
 
         nav = [
@@ -228,14 +228,14 @@ class BayouFindsCleanupCTk:
                 text_color="#e8fbf6",
                 anchor="w",
                 corner_radius=14,
-                height=42,
+                height=40,
                 font=("Segoe UI", 11, "bold"),
             )
-            button.grid(row=row, column=0, sticky="ew", padx=16, pady=4)
+            button.grid(row=row, column=0, sticky="ew", padx=16, pady=3)
             self.sidebar_buttons[label] = button
 
         license_panel = self._card(sidebar, "#11373b", 18)
-        license_panel.grid(row=9, column=0, sticky="ew", padx=16, pady=(8, 8))
+        license_panel.grid(row=9, column=0, sticky="ew", padx=16, pady=(6, 6))
         license_panel.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(license_panel, text="License", text_color=MUTED, font=("Segoe UI", 10, "bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=14, pady=(12, 0)
@@ -257,11 +257,15 @@ class BayouFindsCleanupCTk:
             wraplength=190,
         ).grid(row=2, column=0, sticky="ew", padx=14, pady=(4, 12))
 
-        self._button(sidebar, "🛒 Purchase License", self.purchase_license).grid(row=10, column=0, sticky="ew", padx=16, pady=4)
-        self._button(sidebar, "Import License", self.import_license).grid(row=11, column=0, sticky="ew", padx=16, pady=(4, 8))
+        self._button(sidebar, "🛒 Purchase License", self.purchase_license, height=38).grid(
+            row=10, column=0, sticky="ew", padx=16, pady=(3, 3)
+        )
+        self._button(sidebar, "Import License", self.import_license, height=38).grid(
+            row=11, column=0, sticky="ew", padx=16, pady=(3, 6)
+        )
 
         reminder = self._card(sidebar, "#0f3034", 18)
-        reminder.grid(row=12, column=0, sticky="ew", padx=16, pady=(0, 18))
+        reminder.grid(row=12, column=0, sticky="ew", padx=16, pady=(0, 14))
         ctk.CTkLabel(reminder, text="Protected by Default", text_color=SUCCESS, font=("Segoe UI", 10, "bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=14, pady=(12, 0)
         )
@@ -274,8 +278,8 @@ class BayouFindsCleanupCTk:
             justify="left",
         ).grid(row=1, column=0, sticky="ew", padx=14, pady=(4, 12))
 
-        self.main = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
-        self.main.grid(row=0, column=1, sticky="nsew", padx=24, pady=22)
+        self.main = ctk.CTkScrollableFrame(self.root, fg_color=BG, corner_radius=0)
+        self.main.grid(row=0, column=1, sticky="nsew", padx=18, pady=18)
         self.main.grid_columnconfigure(0, weight=1)
         self.main.grid_rowconfigure(4, weight=1)
 
@@ -374,6 +378,7 @@ class BayouFindsCleanupCTk:
             font=("Segoe UI", 12),
             anchor="w",
             justify="left",
+            wraplength=360,
         )
         self.action_body_label.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 8))
         self.action_status_label = ctk.CTkLabel(
