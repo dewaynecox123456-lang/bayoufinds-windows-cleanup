@@ -53,7 +53,7 @@ try {
 
     Remove-Item -Path $ReleaseDir -Recurse -Force -ErrorAction SilentlyContinue
 
-    & $Python -m pip install --upgrade pyinstaller
+    & $Python -m pip install --upgrade pyinstaller customtkinter
 
     $PyInstallerArgs = @(
         "--onefile",

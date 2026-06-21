@@ -235,6 +235,7 @@ Developer source launch
 
 From the repository root:
 
+  python -m pip install customtkinter
   python gui\BayouFindsCleanupGUI.py
 
 PyInstaller build
@@ -248,6 +249,8 @@ The build script creates a one-file Windows executable and a customer release
 folder at:
 
   release\BayouFindsWindowsCleanup
+
+The build script installs PyInstaller and customtkinter before packaging.
 
 The release folder contains:
 
