@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import traceback
 import webbrowser
 from datetime import datetime
 from math import ceil
@@ -525,7 +526,747 @@ class BayouFindsCleanupCTk:
         button.grid(row=len(self.page_buttons), column=0, sticky="ew", pady=4)
         self.page_buttons.append(button)
 
+    def _set_active_nav(self, label: str) -> None:
+        for button_label, button in self.sidebar_buttons.items():
+            button.configure(fg_color="#1d6868" if button_label == label else SIDEBAR)
+
+    def _configure_text(self, widget, text: str | None = None, foreground: str | None = None) -> None:
+        options = {}
+        if text is not None:
+            options["text"] = text
+        if foreground is not None:
+            try:
+                widget.configure(**options, text_color=foreground)
+                return
+            except Exception:
+                options["foreground"] = foreground
+        widget.configure(**options)
+
+    def _set_dashboard_value(self, label, value: str, foreground: str = TEXT) -> None:
+        self._configure_text(label, value, foreground)
+
+    def _set_result_banner(self, text: str, foreground: str = TEXT) -> None:
+        self._configure_text(self.result_banner_label, text, foreground)
+
+    def _license_display_text(self) -> str:
+        if self.license_state == "active":
+            return "Active"
+        if self.license_state == "trial":
+            return "Trial Mode"
+        return "License Required"
+
+    def _license_color(self) -> str:
+        if self.license_state == "active":
+            return SUCCESS
+        if self.license_state == "trial":
+            return WARNING
+        return ERROR
+
+    def _sync_license_labels(self) -> None:
+        if self.license_state == "active":
+            text = "● ACTIVE"
+            color = SUCCESS
+        elif self.license_state == "trial":
+            text = "● TRIAL MODE"
+            color = WARNING
+        else:
+            text = "● LICENSE REQUIRED"
+            color = ERROR
+
+        if hasattr(self, "license_value_label"):
+            self._configure_text(self.license_value_label, text, color)
+        if hasattr(self, "status_license_value_label"):
+            self._configure_text(self.status_license_value_label, text, color)
+
+    def refresh_license_state(self) -> None:
+        state, detail = self._read_local_license_state()
+        self.license_state = state
+
+        if state == "active":
+            self._sync_license_labels()
+            self._set_dashboard_value(self.recommendation_value_label, "Scan, then run cleanup", TEXT)
+        elif state == "trial":
+            self._sync_license_labels()
+            self._set_dashboard_value(self.recommendation_value_label, "Purchase a license to clean", WARNING)
+        else:
+            self._sync_license_labels()
+            self._set_dashboard_value(self.recommendation_value_label, "Purchase or import a license", WARNING)
+
+        self._apply_license_button_state()
+        if detail:
+            self._configure_text(self.status_label, detail, MUTED if state != "active" else SUCCESS)
+
+    def _read_local_license_state(self) -> tuple[str, str]:
+        candidates = [
+            (Path.home() / ".bayoufinds" / "license.json", "json"),
+            (Path.home() / ".bayoufinds" / "license.key", "legacy-key"),
+        ]
+
+        for path, license_format in candidates:
+            if not path.exists():
+                continue
+
+            if license_format == "legacy-key":
+                return "active", "Legacy license found"
+
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                return "required", "License needs attention"
+
+            product = str(data.get("product") or data.get("product_id") or data.get("app") or "").lower()
+            if product and product != "bayoufinds-windows-cleanup" and "cleanup" not in product:
+                return "required", "License product mismatch"
+
+            mode = str(data.get("mode") or data.get("license_mode") or "Licensed").strip().lower()
+            expires_at = data.get("expiresAt") or data.get("expires_at") or data.get("expires") or data.get("expiration")
+            if expires_at and self._is_expired(str(expires_at)):
+                return "required", "License expired"
+
+            if mode in {"licensed", "active", "paid"}:
+                return "active", "Active license found"
+            if mode == "trial":
+                return "trial", "Trial license found"
+            return "required", "License required"
+
+        return "required", "No license found"
+
+    def _is_expired(self, expires_at: str) -> bool:
+        normalized = expires_at.replace("Z", "+00:00")
+        try:
+            expires_on = datetime.fromisoformat(normalized)
+            if expires_on.tzinfo:
+                return expires_on < datetime.now().astimezone()
+            return expires_on < datetime.now()
+        except ValueError:
+            pass
+
+        for date_format in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(expires_at, date_format) < datetime.now()
+            except ValueError:
+                continue
+        return True
+
+    def _apply_license_button_state(self) -> None:
+        state = "normal" if self.license_state == "active" else "disabled"
+        for button in self.licensed_buttons:
+            button.configure(state=state)
+
+    def _has_active_license(self) -> bool:
+        self.refresh_license_state()
+        return self.license_state == "active"
+
+    def purchase_license(self) -> None:
+        webbrowser.open(PURCHASE_URL)
+
+    def _show_license_required_prompt(self) -> None:
+        prompt = ctk.CTkToplevel(self.root)
+        prompt.title("License Required")
+        prompt.geometry("520x260")
+        prompt.resizable(False, False)
+        prompt.transient(self.root)
+        prompt.grab_set()
+        prompt.configure(fg_color=BG)
+        prompt.grid_columnconfigure(0, weight=1)
+
+        frame = self._card(prompt, CARD, 20)
+        frame.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
+        frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(frame, text="License Required", text_color=ERROR, font=("Segoe UI", 20, "bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=20, pady=(20, 8)
+        )
+        ctk.CTkLabel(
+            frame,
+            text="License Required. Scan and reports are available in trial mode. Activate to clean and recover space.",
+            text_color=TEXT,
+            font=("Segoe UI", 12),
+            justify="left",
+            wraplength=440,
+            anchor="w",
+        ).grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 18))
+
+        buttons = ctk.CTkFrame(frame, fg_color="transparent")
+        buttons.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 20))
+        buttons.grid_columnconfigure((0, 1, 2), weight=1, uniform="license_prompt")
+        self._button(buttons, "Purchase License", lambda: (prompt.destroy(), self.purchase_license()), PRIMARY, PRIMARY_DARK, "#082320").grid(
+            row=0, column=0, sticky="ew", padx=(0, 6)
+        )
+        self._button(buttons, "Import License", lambda: (prompt.destroy(), self.import_license())).grid(
+            row=0, column=1, sticky="ew", padx=6
+        )
+        self._button(buttons, "Not Now", prompt.destroy, "#173f44", "#22595e", TEXT).grid(row=0, column=2, sticky="ew", padx=(6, 0))
+
+    def import_license(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Select BayouFinds license.json",
+            filetypes=[("BayouFinds license", "license.json"), ("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+
+        source = Path(selected)
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+        except Exception as exc:
+            messagebox.showerror(WINDOW_TITLE, f"Could not read this license file.\n\n{exc}")
+            return
+
+        product = str(data.get("product") or data.get("product_id") or data.get("app") or "").lower()
+        customer = data.get("customer") or data.get("customer_name") or data.get("name") or "Customer"
+        expires = data.get("expires") or data.get("expires_at") or data.get("expiration") or "Not listed"
+
+        if product and "cleanup" not in product and "bayoufinds-windows-cleanup" not in product:
+            if not messagebox.askyesno(
+                WINDOW_TITLE,
+                "This license does not appear to be for BayouFinds Cleanup Assistant.\n\nImport it anyway?",
+            ):
+                return
+
+        license_dir = Path.home() / ".bayoufinds"
+        license_dir.mkdir(parents=True, exist_ok=True)
+        destination = license_dir / "license.json"
+
+        try:
+            shutil.copy2(source, destination)
+        except Exception as exc:
+            messagebox.showerror(WINDOW_TITLE, f"Could not install the license file.\n\n{exc}")
+            return
+
+        self._append_output(
+            f"License imported successfully.\nInstalled to: {destination}\nCustomer: {customer}\nExpires: {expires}\n\n"
+        )
+        self._configure_text(self.status_label, "License imported", SUCCESS)
+        self.refresh_license_state()
+        messagebox.showinfo(
+            WINDOW_TITLE,
+            f"License imported successfully.\n\nCustomer: {customer}\nExpires: {expires}\n\nYou can now run cleanup if the license is active.",
+        )
+
+    def quick_cleanup(self) -> None:
+        self._set_active_nav("Cleanup")
+        if not self._has_active_license():
+            self._show_license_required_prompt()
+            return
+
+        if not messagebox.askyesno(
+            "Run Safe Cleanup",
+            "Run safe cleanup now?\n\nThis cleans safe temporary files and app caches only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads.",
+        ):
+            return
+        self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
+
+    def scan_my_pc(self) -> None:
+        self._set_active_nav("Scan")
+        self.run_cleanup("Scan My PC", ["-NoMenu", "-Mode", "Preview"])
+
+    def run_cleanup(self, action_name: str, args: list[str]) -> None:
+        if self.worker_thread and self.worker_thread.is_alive():
+            messagebox.showinfo(WINDOW_TITLE, "Another action is already running.")
+            return
+
+        if not self.script_path.exists():
+            messagebox.showerror(WINDOW_TITLE, f"Cleanup script was not found:\n{self.script_path}")
+            return
+
+        self._set_running(True)
+        self.current_action_name = action_name
+        self.run_output_lines = []
+        self.run_started_at = datetime.now().timestamp()
+        self._set_result_banner(f"{action_name} is running...", ACCENT)
+        self._update_dashboard_for_start(action_name)
+        self._clear_output()
+        self._append_output(f"{action_name} is running...\n\n")
+        self._append_output("This panel will show a cleanup breakdown when the task finishes.\n")
+        self._append_output(f"Reports folder: {self.log_folder}\n\n")
+
+        self.worker_thread = threading.Thread(
+            target=self._run_subprocess,
+            args=(action_name, args),
+            daemon=True,
+        )
+        self.worker_thread.start()
+
+    def _run_subprocess(self, action_name: str, args: list[str]) -> None:
+        command = self._build_powershell_command(args)
+
+        try:
+            self.current_process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                cwd=str(self.base_dir),
+                creationflags=self._creation_flags(),
+                startupinfo=self._startup_info(),
+            )
+
+            assert self.current_process.stdout is not None
+            for line in self.current_process.stdout:
+                self.output_queue.put(("line", line))
+
+            exit_code = self.current_process.wait()
+            self.output_queue.put(("done", exit_code))
+        except Exception as exc:
+            self.output_queue.put(("line", f"ERROR: {exc}\n"))
+            self.output_queue.put(("done", 1))
+        finally:
+            self.current_process = None
+
+    def _get_powershell_executable(self) -> str:
+        if os.name == "nt":
+            return "powershell.exe"
+        return "pwsh"
+
+    def _build_powershell_command(self, args: list[str]) -> list[str]:
+        command = [
+            self._get_powershell_executable(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+        ]
+
+        if os.name == "nt":
+            command.extend(["-WindowStyle", "Hidden"])
+
+        command.extend(["-File", str(self.script_path), *args])
+        return command
+
+    def _creation_flags(self) -> int:
+        if os.name == "nt":
+            return subprocess.CREATE_NO_WINDOW
+        return 0
+
+    def _startup_info(self):
+        if os.name != "nt":
+            return None
+
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return startupinfo
+
+    def _poll_output_queue(self) -> None:
+        try:
+            while True:
+                event, payload = self.output_queue.get_nowait()
+                if event == "line":
+                    line = str(payload)
+                    self.run_output_lines.append(line)
+                    self._capture_license_mode(line)
+                elif event == "done":
+                    self._handle_done(int(payload or 0))
+        except queue.Empty:
+            pass
+
+        self.root.after(100, self._poll_output_queue)
+
+    def _handle_done(self, exit_code: int) -> None:
+        action_name = self.current_action_name
+        self.current_action_name = None
+        self._set_running(False)
+        self._show_structured_breakdown(action_name, exit_code)
+        self.run_started_at = None
+        self._update_dashboard_for_done(action_name, exit_code)
+
+        if exit_code == 0:
+            self._configure_text(self.status_label, "Completed successfully", SUCCESS)
+            messagebox.showinfo(
+                WINDOW_TITLE,
+                "Task completed successfully.\n\nReview the on-screen results or click Open Latest Report before running additional actions.\n\nReports are saved on your Desktop in:\nBayouFinds_Cleanup_Logs",
+            )
+        else:
+            self._configure_text(self.status_label, "Completed with errors", ERROR)
+            messagebox.showerror(
+                WINDOW_TITLE,
+                f"Task finished with errors.\n\nExit code: {exit_code}\n\nOpen the log folder and review the report before running cleanup again.",
+            )
+
+    def _set_running(self, running: bool) -> None:
+        for button in self.buttons:
+            button.configure(state="disabled" if running else "normal")
+
+        if not running:
+            self._apply_license_button_state()
+
+        self._configure_text(self.status_label, "Running..." if running else "Ready", ACCENT if running else MUTED)
+
+    def _update_dashboard_for_start(self, action_name: str) -> None:
+        if action_name == "Scan My PC":
+            self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
+            self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
+            self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
+            self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
+        elif action_name == "Run Safe Cleanup":
+            self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
+            self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
+
+    def _update_dashboard_for_done(self, action_name: str | None, exit_code: int) -> None:
+        now = datetime.now().strftime("%I:%M %p").lstrip("0")
+        if action_name == "Scan My PC":
+            if exit_code == 0:
+                self._set_dashboard_value(self.last_scan_value_label, f"Completed at {now}", SUCCESS)
+                self._set_dashboard_value(self.recommendation_value_label, "Review results, then run cleanup", TEXT)
+            else:
+                self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
+                self._set_dashboard_value(self.recommendation_value_label, "Open the report before cleanup", WARNING)
+        elif action_name == "Run Safe Cleanup":
+            if exit_code == 0:
+                self._set_dashboard_value(self.recommendation_value_label, "Cleanup complete", SUCCESS)
+            else:
+                self._set_dashboard_value(self.recommendation_value_label, "Review the report", WARNING)
+
+    def _show_structured_breakdown(self, action_name: str | None, exit_code: int) -> None:
+        report = self._load_latest_json_report()
+        stats = self._load_cleanup_stats()
+        self._clear_output()
+
+        if report:
+            if report.get("RunMode") == "LicenseCheck":
+                self._append_output(self._format_license_breakdown(report, exit_code))
+                return
+            self._update_metrics_from_report(report, stats)
+            self._append_output(self._format_cleanup_breakdown(report, action_name, exit_code))
+            return
+
+        self._append_output(f"{action_name or 'Task'} finished with exit code {exit_code}.\n\n")
+        self._set_result_banner(
+            f"{action_name or 'Task'} finished with errors" if exit_code else f"{action_name or 'Task'} complete",
+            ERROR if exit_code else SUCCESS,
+        )
+        self._append_output("A structured report was not found yet. Open the reports folder to review the log.\n\n")
+        if self.run_output_lines:
+            self._append_output("Recent messages:\n")
+            for line in self.run_output_lines[-12:]:
+                self._append_output(f"- {line.strip()}\n")
+
+    def _load_latest_json_report(self) -> dict | None:
+        report_path = self._find_latest_json_report(min_mtime=self.run_started_at)
+        if not report_path:
+            return None
+        return self._load_json_file(report_path)
+
+    def _load_cleanup_stats(self) -> dict | None:
+        stats_path = self.log_folder / "cleanup_stats.json"
+        if not stats_path.exists():
+            return None
+        return self._load_json_file(stats_path)
+
+    def _load_json_file(self, path: Path) -> dict | None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _update_metrics_from_report(self, report: dict, stats: dict | None) -> None:
+        statistics = report.get("Statistics") or {}
+        recoverable = int(statistics.get("RecoverableBytes") or 0)
+        recovered = int(statistics.get("RecoveredBytes") or 0)
+        total_recovered = int(statistics.get("TotalRecoveredBytes") or 0)
+        health_score = int(statistics.get("PCHealthScore") or 100)
+
+        if stats:
+            total_recovered = int(stats.get("TotalRecoveredBytes") or total_recovered)
+            health_score = int(stats.get("PCHealthScore") or health_score)
+
+        self._set_dashboard_value(self.recoverable_value_label, self._format_bytes(recoverable), TEXT)
+        self._set_dashboard_value(self.recovered_run_value_label, self._format_bytes(recovered), SUCCESS)
+        self._set_dashboard_value(self.total_recovered_value_label, self._format_bytes(total_recovered), SUCCESS)
+        self._set_dashboard_value(self.health_score_value_label, f"{health_score}/100", self._health_color(health_score))
+
+    def _format_cleanup_breakdown(self, report: dict, action_name: str | None, exit_code: int) -> str:
+        statistics = report.get("Statistics") or {}
+        categories = report.get("CleanupCategories") or []
+        run_mode = report.get("RunMode") or action_name or "Cleanup"
+        recoverable = int(statistics.get("RecoverableBytes") or 0)
+        recovered = int(statistics.get("RecoveredBytes") or 0)
+        total_recovered = int(statistics.get("TotalRecoveredBytes") or 0)
+        health_score = int(statistics.get("PCHealthScore") or 100)
+        is_preview = run_mode == "Preview" or action_name == "Scan My PC"
+        banner = (
+            f"Scan Complete — Recoverable Space Found: {self._format_gb(recoverable)}"
+            if is_preview
+            else f"Cleanup Complete — Space Recovered: {self._format_gb(recovered)}"
+        )
+        self._set_result_banner(banner, SUCCESS if exit_code == 0 else ERROR)
+        lines = [
+            banner,
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
+            "",
+            "Dashboard metrics",
+            f"Recoverable Space: {self._format_bytes(recoverable)}",
+            f"Recovered This Run: {self._format_bytes(recovered)}",
+            f"Total Recovered: {self._format_bytes(total_recovered)}",
+            f"PC Health Score: {health_score}/100",
+            "",
+            "Cleanup breakdown",
+        ]
+
+        grouped = self._group_cleanup_categories(categories)
+        metric_key = "estimated" if is_preview else "recovered"
+        for group_name in [
+            "Windows Temp",
+            "Browser Cache",
+            "Discord Cache",
+            "Teams Cache",
+            "Slack Cache",
+            "Zoom Cache",
+            "Recycle Bin",
+        ]:
+            group = grouped[group_name]
+            value = self._format_bytes(group[metric_key])
+            if group["notes"]:
+                lines.append(f"- {group_name}: {value} ({'; '.join(group['notes'])})")
+            else:
+                lines.append(f"- {group_name}: {value}")
+
+        total = recoverable if is_preview else recovered
+        lines.append(f"- Total: {self._format_bytes(total)}")
+
+        paths = report.get("Paths") or {}
+        lines.extend(
+            [
+                "",
+                "Protected by Default",
+                "Documents, Pictures, Downloads, Desktop, Videos, Music, and browser passwords are not cleaned by default.",
+                "",
+                "Safety",
+                "Personal folders are protected by default. Registry cleaning and driver cleanup are not included.",
+                "",
+                f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+                f"Stats: {paths.get('StatsFile') or str(self.log_folder / 'cleanup_stats.json')}",
+                "",
+            ]
+        )
+        return "\n".join(lines)
+
+    def _format_license_breakdown(self, report: dict, exit_code: int) -> str:
+        license_info = report.get("License") or {}
+        mode = license_info.get("Mode") or "Not checked"
+        message = license_info.get("Message") or "License check complete."
+        normalized_mode = str(mode).lower()
+        if normalized_mode == "licensed":
+            status = "Active"
+            color = SUCCESS
+        elif normalized_mode == "trial":
+            status = "Trial"
+            color = WARNING
+        else:
+            status = "Needs attention"
+            color = ERROR
+        self._set_result_banner(f"License Status — {status}", color)
+        return "\n".join(
+            [
+                f"License Status: {status}",
+                "",
+                f"Mode: {mode}",
+                f"Message: {message}",
+                f"Exit code: {exit_code}",
+                "",
+                "Cleanup dashboard metrics were not changed by this license check.",
+                "",
+            ]
+        )
+
+    def _group_cleanup_categories(self, categories: list) -> dict[str, dict]:
+        grouped = {
+            "Windows Temp": {"estimated": 0, "recovered": 0, "notes": []},
+            "Browser Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Discord Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Teams Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Slack Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Zoom Cache": {"estimated": 0, "recovered": 0, "notes": []},
+            "Recycle Bin": {"estimated": 0, "recovered": 0, "notes": []},
+        }
+
+        for category in categories:
+            if not isinstance(category, dict):
+                continue
+
+            group_name = self._category_group_name(category)
+            if not group_name:
+                continue
+
+            grouped[group_name]["estimated"] += int(category.get("EstimatedBytes") or 0)
+            grouped[group_name]["recovered"] += int(category.get("ActualBytesRemoved") or 0)
+            reason = category.get("SkippedReason")
+            if reason and reason not in grouped[group_name]["notes"]:
+                grouped[group_name]["notes"].append(str(reason))
+
+        return grouped
+
+    def _category_group_name(self, category: dict) -> str | None:
+        category_id = str(category.get("Id") or "").lower()
+        label = str(category.get("Label") or "").lower()
+        combined = f"{category_id} {label}"
+
+        if "recycle" in combined:
+            return "Recycle Bin"
+        if "discord" in combined:
+            return "Discord Cache"
+        if "teams" in combined:
+            return "Teams Cache"
+        if "slack" in combined:
+            return "Slack Cache"
+        if "zoom" in combined:
+            return "Zoom Cache"
+        if any(token in combined for token in ["edge", "chrome", "browser", "internet", "web cache"]):
+            return "Browser Cache"
+        if any(token in combined for token in ["temp", "recent"]):
+            return "Windows Temp"
+        return None
+
+    def _format_bytes(self, value: int) -> str:
+        units = ["B", "KB", "MB", "GB", "TB"]
+        amount = float(max(value, 0))
+        unit_index = 0
+        while amount >= 1024 and unit_index < len(units) - 1:
+            amount /= 1024
+            unit_index += 1
+
+        if unit_index == 0:
+            return f"{int(amount)} {units[unit_index]}"
+        return f"{amount:.1f} {units[unit_index]}"
+
+    def _format_gb(self, value: int) -> str:
+        return f"{max(value, 0) / (1024 ** 3):.2f} GB"
+
+    def _health_color(self, score: int) -> str:
+        if score >= 85:
+            return SUCCESS
+        if score >= 70:
+            return WARNING
+        return ERROR
+
+    def _capture_license_mode(self, line: str) -> None:
+        marker = "license mode:"
+        lower_line = line.lower()
+        if marker not in lower_line:
+            return
+
+        mode = lower_line.split(marker, 1)[1].strip().split(" ", 1)[0]
+        self.last_license_mode = mode.strip(".")
+
+    def _clear_output(self) -> None:
+        self.output.configure(state="normal")
+        self.output.delete("1.0", "end")
+        self.output.configure(state="disabled")
+
+    def _append_output(self, text: str) -> None:
+        self.output.configure(state="normal")
+        self.output.insert("end", text)
+        self.output.see("end")
+        self.output.configure(state="disabled")
+
+    def open_log_folder(self) -> None:
+        self.log_folder.mkdir(parents=True, exist_ok=True)
+
+        if os.name == "nt":
+            os.startfile(self.log_folder)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(self.log_folder.as_uri())
+
+    def open_latest_report(self) -> None:
+        latest_report = self._find_latest_report()
+        if not latest_report:
+            messagebox.showinfo(
+                WINDOW_TITLE,
+                "No cleanup report was found yet.\n\nClick Scan My PC first, then use Open Latest Report.",
+            )
+            return
+
+        if os.name == "nt":
+            os.startfile(latest_report)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(latest_report.as_uri())
+
+    def view_technical_details(self) -> None:
+        latest_log = self._find_latest_log()
+        if not latest_log:
+            self.open_log_folder()
+            return
+
+        if os.name == "nt":
+            os.startfile(latest_log)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(latest_log.as_uri())
+
+    def _find_latest_report(self) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        reports = sorted(
+            self.log_folder.glob("cleanup_report_*.html"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        return reports[0] if reports else None
+
+    def _find_latest_log(self) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        logs = sorted(
+            self.log_folder.glob("cleanup_*.log"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        return logs[0] if logs else None
+
+    def _find_latest_json_report(self, min_mtime: float | None = None) -> Path | None:
+        if not self.log_folder.exists():
+            return None
+
+        reports = []
+        for path in self.log_folder.glob("cleanup_report_*.json"):
+            modified_at = path.stat().st_mtime
+            if min_mtime is not None and modified_at < min_mtime - 2:
+                continue
+            reports.append(path)
+
+        reports.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        return reports[0] if reports else None
+
+    def show_about(self) -> None:
+        about = ctk.CTkToplevel(self.root)
+        about.title(f"About {APP_NAME}")
+        about.geometry("460x320")
+        about.resizable(False, False)
+        about.transient(self.root)
+        about.grab_set()
+        about.configure(fg_color=BG)
+        about.grid_columnconfigure(0, weight=1)
+
+        frame = self._card(about, CARD, 20)
+        frame.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
+        frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(frame, text=APP_NAME, text_color=TEXT, font=("Segoe UI", 20, "bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=20, pady=(20, 4)
+        )
+        ctk.CTkLabel(frame, text=APP_VERSION, text_color=ACCENT, font=("Segoe UI", 13, "bold"), anchor="w").grid(
+            row=1, column=0, sticky="ew", padx=20, pady=(0, 12)
+        )
+        ctk.CTkLabel(frame, text="Built by BayouFinds", text_color=TEXT, font=("Segoe UI", 12), anchor="w").grid(
+            row=2, column=0, sticky="ew", padx=20, pady=(0, 4)
+        )
+        ctk.CTkLabel(
+            frame,
+            text="A scan-first Windows cleanup and reporting utility for home users.",
+            text_color=MUTED,
+            font=("Segoe UI", 12),
+            wraplength=380,
+            justify="left",
+            anchor="w",
+        ).grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 18))
+        self._button(frame, "Close", about.destroy).grid(row=4, column=0, sticky="e", padx=20, pady=(0, 20))
+
 def main() -> None:
+    print("Starting BayouFinds Cleanup Assistant CTk GUI...", flush=True)
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("green")
 
@@ -539,4 +1280,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
