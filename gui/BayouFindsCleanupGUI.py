@@ -32,6 +32,10 @@ WINDOW_SIZE = "1200x760"
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 760
 CONTENT_PADDING = 18
+CARD_PADDING = 24
+CARD_MARGIN = 24
+SIDEBAR_WIDTH = 260
+CONTENT_GAP = 22
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
 HEADER_IMAGE_MAX_HEIGHT = 40
 MASCOT_IMAGE_MAX_WIDTH = 170
@@ -702,7 +706,10 @@ class BayouFindsCleanupGUI:
         radius: int = 26,
         glow: bool = False,
         border: str = CARD_BORDER,
-    ) -> None:
+        padding: int = CARD_PADDING,
+    ) -> tuple[int, int, int, int]:
+        width = max(width, padding * 2)
+        height = max(height, padding * 2)
         shadow = GLOW if glow else SHADOW
         draw_round_rect(self.dashboard_canvas, x + 8, y + 10, x + width + 8, y + height + 10, radius, fill=shadow, outline="")
         draw_round_rect(
@@ -726,6 +733,7 @@ class BayouFindsCleanupGUI:
             fill="#1a5054",
             outline="",
         )
+        return x + padding, y + padding, width - (padding * 2), height - (padding * 2)
 
     def _canvas_button(
         self,
@@ -773,6 +781,7 @@ class BayouFindsCleanupGUI:
         self.dashboard_widgets: list[GlassButton] = []
         self._dashboard_render_size: tuple[int, int] = (0, 0)
         self.dashboard_canvas.bind("<Configure>", self._render_dashboard)
+        self._render_dashboard()
         self.root.after(10, self._render_dashboard)
 
     def _render_dashboard(self, event=None) -> None:
@@ -795,16 +804,26 @@ class BayouFindsCleanupGUI:
         self.sidebar_buttons = {}
         self.dashboard_canvas.delete("all")
 
-        margin = 24
-        gap = 22
-        sidebar_w = 260
+        margin = CARD_MARGIN
+        gap = CONTENT_GAP
+        sidebar_w = SIDEBAR_WIDTH
         content_x = margin + sidebar_w + gap
         content_w = width - content_x - margin
         bottom = height - margin
 
-        self._canvas_panel(margin, margin, sidebar_w, height - (margin * 2), fill=SIDEBAR, radius=34, glow=True, border="#2c7272")
-        self._canvas_text(margin + 30, margin + 30, "BayouFinds", fill=TEXT, font=("Segoe UI", 20, "bold"))
-        self._canvas_text(margin + 30, margin + 62, "Cleanup Assistant", fill=MUTED, font=("Segoe UI", 10))
+        sidebar_cx, sidebar_cy, sidebar_cw, sidebar_ch = self._canvas_panel(
+            margin,
+            margin,
+            sidebar_w,
+            height - (margin * 2),
+            fill=SIDEBAR,
+            radius=34,
+            glow=True,
+            border="#2c7272",
+            padding=26,
+        )
+        self._canvas_text(sidebar_cx, sidebar_cy, "BayouFinds", fill=TEXT, font=("Segoe UI", 20, "bold"))
+        self._canvas_text(sidebar_cx, sidebar_cy + 32, "Cleanup Assistant", fill=MUTED, font=("Segoe UI", 10))
 
         nav_items = [
             ("Home", lambda: self._set_view("Home")),
@@ -816,11 +835,11 @@ class BayouFindsCleanupGUI:
         ]
         for index, (label, command) in enumerate(nav_items):
             button = self._canvas_button(
-                margin + 26,
-                margin + 112 + (index * 52),
+                sidebar_cx,
+                sidebar_cy + 88 + (index * 52),
                 label,
                 command,
-                sidebar_w - 52,
+                sidebar_cw,
                 44,
                 SIDEBAR,
                 "#1d6868",
@@ -833,30 +852,39 @@ class BayouFindsCleanupGUI:
 
         protected_reminder_h = 76
         button_h = 40
-        side_inner_x = margin + 24
-        side_inner_w = sidebar_w - 48
+        side_inner_x = sidebar_cx
+        side_inner_w = sidebar_cw
         protected_y = bottom - protected_reminder_h
         purchase_y = protected_y - 52
         import_y = purchase_y - 48
         license_y = import_y - 130
 
-        self._canvas_panel(side_inner_x, license_y, side_inner_w, 112, fill="#11373b", radius=22, glow=True)
-        self._canvas_text(side_inner_x + 20, license_y + 20, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        license_cx, license_cy, license_cw, license_ch = self._canvas_panel(
+            side_inner_x,
+            license_y,
+            side_inner_w,
+            112,
+            fill="#11373b",
+            radius=22,
+            glow=True,
+            padding=18,
+        )
+        self._canvas_text(license_cx, license_cy, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
         self.license_value_label = self._canvas_text(
-            side_inner_x + 20,
-            license_y + 44,
+            license_cx,
+            license_cy + 24,
             "● LICENSE REQUIRED",
             fill=ERROR,
             font=("Segoe UI", 10, "bold"),
-            width=side_inner_w - 40,
+            width=license_cw,
         )
         self._canvas_text(
-            side_inner_x + 20,
-            license_y + 78,
+            license_cx,
+            license_cy + 58,
             "Trial mode:\nscan and reports only",
             fill=MUTED,
             font=("Segoe UI", 8),
-            width=side_inner_w - 40,
+            width=license_cw,
         )
 
         self._canvas_button(
@@ -884,15 +912,23 @@ class BayouFindsCleanupGUI:
             glow=True,
             font=("Segoe UI", 9, "bold"),
         )
-        self._canvas_panel(side_inner_x, protected_y, side_inner_w, protected_reminder_h, fill="#0f3034", radius=20)
-        self._canvas_text(side_inner_x + 18, protected_y + 16, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 9, "bold"))
+        reminder_cx, reminder_cy, reminder_cw, reminder_ch = self._canvas_panel(
+            side_inner_x,
+            protected_y,
+            side_inner_w,
+            protected_reminder_h,
+            fill="#0f3034",
+            radius=20,
+            padding=16,
+        )
+        self._canvas_text(reminder_cx, reminder_cy, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 9, "bold"))
         self._canvas_text(
-            side_inner_x + 18,
-            protected_y + 38,
+            reminder_cx,
+            reminder_cy + 22,
             "Personal folders and saved logins stay protected.",
             fill=MUTED,
             font=("Segoe UI", 8),
-            width=side_inner_w - 36,
+            width=reminder_cw,
         )
 
         self.view_title_label = self._canvas_text(
@@ -929,14 +965,22 @@ class BayouFindsCleanupGUI:
         metric_w = max(154, (content_w - (metric_gap * 3)) // 4)
         for index, (symbol, label, value, helper) in enumerate(metrics):
             x = content_x + (index * (metric_w + metric_gap))
-            self._canvas_panel(x, metric_y, metric_w, metric_h, fill=CARD, radius=24, glow=index == 0)
-            center_x = x + (metric_w // 2)
-            self._canvas_text(center_x, metric_y + 22, symbol, fill=ACCENT if index == 0 else MUTED, font=("Segoe UI", 18, "bold"), anchor="n")
-            self._canvas_text(center_x, metric_y + 54, label, fill=MUTED, font=("Segoe UI", 8, "bold"), width=metric_w - 28, anchor="n")
-            metric_labels.append(
-                self._canvas_text(center_x, metric_y + 78, value, fill=TEXT, font=("Segoe UI", 13, "bold"), anchor="n")
+            metric_cx, metric_cy, metric_cw, metric_ch = self._canvas_panel(
+                x,
+                metric_y,
+                metric_w,
+                metric_h,
+                fill=CARD,
+                radius=24,
+                glow=index == 0,
+                padding=20,
             )
-            self._canvas_text(center_x, metric_y + 108, helper, fill=MUTED, font=("Segoe UI", 8), width=metric_w - 28, anchor="n")
+            self._canvas_text(metric_cx, metric_cy, symbol, fill=ACCENT if index == 0 else MUTED, font=("Segoe UI", 18, "bold"))
+            self._canvas_text(metric_cx, metric_cy + 34, label, fill=MUTED, font=("Segoe UI", 8, "bold"), width=metric_cw)
+            metric_labels.append(
+                self._canvas_text(metric_cx, metric_cy + 60, value, fill=TEXT, font=("Segoe UI", 13, "bold"))
+            )
+            self._canvas_text(metric_cx, metric_cy + 92, helper, fill=MUTED, font=("Segoe UI", 8), width=metric_cw)
         (
             self.recoverable_value_label,
             self.recovered_run_value_label,
@@ -946,27 +990,35 @@ class BayouFindsCleanupGUI:
 
         status_y = metric_y + metric_h + 22
         status_h = 72
-        self._canvas_panel(content_x, status_y, content_w, status_h, fill="#0f3034", radius=24)
-        status_col_w = content_w // 3
-        self._canvas_text(content_x + 24, status_y + 16, "Last Scan", fill=MUTED, font=("Segoe UI", 9, "bold"))
-        self.last_scan_value_label = self._canvas_text(content_x + 24, status_y + 40, "Not run yet", fill=TEXT, font=("Segoe UI", 11, "bold"), width=status_col_w - 44)
-        self._canvas_text(content_x + status_col_w + 24, status_y + 16, "Recommendation", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        status_cx, status_cy, status_cw, status_ch = self._canvas_panel(
+            content_x,
+            status_y,
+            content_w,
+            status_h,
+            fill="#0f3034",
+            radius=24,
+            padding=18,
+        )
+        status_col_w = status_cw // 3
+        self._canvas_text(status_cx, status_cy, "Last Scan", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self.last_scan_value_label = self._canvas_text(status_cx, status_cy + 24, "Not run yet", fill=TEXT, font=("Segoe UI", 11, "bold"), width=status_col_w - 24)
+        self._canvas_text(status_cx + status_col_w, status_cy, "Recommendation", fill=MUTED, font=("Segoe UI", 9, "bold"))
         self.recommendation_value_label = self._canvas_text(
-            content_x + status_col_w + 24,
-            status_y + 40,
+            status_cx + status_col_w,
+            status_cy + 24,
             "Start with Scan My PC",
             fill=TEXT,
             font=("Segoe UI", 11, "bold"),
-            width=status_col_w - 44,
+            width=status_col_w - 24,
         )
-        self._canvas_text(content_x + (status_col_w * 2) + 24, status_y + 16, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
+        self._canvas_text(status_cx + (status_col_w * 2), status_cy, "License", fill=MUTED, font=("Segoe UI", 9, "bold"))
         self.status_license_value_label = self._canvas_text(
-            content_x + (status_col_w * 2) + 24,
-            status_y + 40,
+            status_cx + (status_col_w * 2),
+            status_cy + 24,
             "● LICENSE REQUIRED",
             fill=ERROR,
             font=("Segoe UI", 11, "bold"),
-            width=status_col_w - 44,
+            width=status_col_w - 24,
         )
 
         middle_y = status_y + status_h + 22
@@ -977,30 +1029,49 @@ class BayouFindsCleanupGUI:
             protected_w = 360
             start_w = content_w - protected_w - gap
 
-        self._canvas_panel(content_x, middle_y, start_w, middle_h, fill=CARD_SOFT, radius=28, glow=True)
-        self._canvas_text(content_x + 30, middle_y + 26, "Start Here", fill=TEXT, font=("Segoe UI", 19, "bold"))
+        start_cx, start_cy, start_cw, start_ch = self._canvas_panel(
+            content_x,
+            middle_y,
+            start_w,
+            middle_h,
+            fill=CARD_SOFT,
+            radius=28,
+            glow=True,
+            padding=CARD_PADDING,
+        )
+        self._canvas_text(start_cx, start_cy, "Start Here", fill=TEXT, font=("Segoe UI", 19, "bold"))
         self._canvas_text(
-            content_x + 30,
-            middle_y + 66,
+            start_cx,
+            start_cy + 42,
             "Scan first. Cleanup stays locked until your license is active.",
             fill=MUTED,
             font=("Segoe UI", 11),
-            width=max(220, start_w - 320),
+            width=max(220, start_cw - 300),
         )
-        button_x = content_x + start_w - 284
-        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=button_x, y=middle_y + 34)
+        action_button_w = 248
+        button_x = min(start_cx + start_cw - action_button_w, content_x + start_w - CARD_PADDING - action_button_w)
+        button_x = max(start_cx, button_x)
+        self._add_primary_button(self.dashboard_canvas, "Scan My PC", self.scan_my_pc, x=button_x, y=start_cy + 10)
         self._add_action_button(
             self.dashboard_canvas,
             "Run Safe Cleanup",
             self.quick_cleanup,
             requires_license=True,
             x=button_x,
-            y=middle_y + 104,
+            y=start_cy + 80,
         )
 
         protected_x = content_x + start_w + gap
-        self._canvas_panel(protected_x, middle_y, protected_w, middle_h, fill=CARD, radius=28)
-        self._canvas_text(protected_x + 28, middle_y + 24, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 15, "bold"))
+        protected_cx, protected_cy, protected_cw, protected_ch = self._canvas_panel(
+            protected_x,
+            middle_y,
+            protected_w,
+            middle_h,
+            fill=CARD,
+            radius=28,
+            padding=CARD_PADDING,
+        )
+        self._canvas_text(protected_cx, protected_cy, "Protected by Default", fill=SUCCESS, font=("Segoe UI", 15, "bold"))
         protected_items = [
             "✓ Documents",
             "✓ Pictures",
@@ -1012,40 +1083,50 @@ class BayouFindsCleanupGUI:
             "✓ Saved Logins",
         ]
         for index, item in enumerate(protected_items):
-            x = protected_x + 28 if index % 2 == 0 else protected_x + max(186, protected_w // 2)
-            y = middle_y + 66 + ((index // 2) * 28)
-            self._canvas_text(x, y, item, fill=TEXT, font=("Segoe UI", 10, "bold"), width=max(142, protected_w // 2 - 38))
+            column_w = max(132, (protected_cw - 16) // 2)
+            x = protected_cx if index % 2 == 0 else protected_cx + column_w + 16
+            y = protected_cy + 42 + ((index // 2) * 28)
+            self._canvas_text(x, y, item, fill=TEXT, font=("Segoe UI", 10, "bold"), width=column_w)
 
         results_y = middle_y + middle_h + 22
         results_h = max(142, bottom - results_y)
         results_x = content_x
         results_w = content_w
-        self._canvas_panel(results_x, results_y, results_w, results_h, fill="#0f3034", radius=28, glow=False)
+        results_cx, results_cy, results_cw, results_ch = self._canvas_panel(
+            results_x,
+            results_y,
+            results_w,
+            results_h,
+            fill="#0f3034",
+            radius=28,
+            glow=False,
+            padding=CARD_PADDING,
+        )
         self.result_banner_label = self._canvas_text(
-            results_x + 30,
-            results_y + 26,
+            results_cx,
+            results_cy,
             "Scan Results",
             fill=TEXT,
             font=("Segoe UI", 16, "bold"),
-            width=results_w - 260,
+            width=max(260, results_cw - 230),
         )
-        self.status_label = self._canvas_text(results_x + 30, results_y + 58, "Ready", fill=MUTED, font=("Segoe UI", 10, "bold"))
+        self.status_label = self._canvas_text(results_cx, results_cy + 32, "Ready", fill=MUTED, font=("Segoe UI", 10, "bold"))
         output_item = self.dashboard_canvas.create_text(
-            results_x + 30,
-            results_y + 92,
+            results_cx,
+            results_cy + 68,
             text=(
                 "No scan has been run yet.\n\n"
                 "Click Scan My PC to check for safe temporary files and app caches."
             ),
             fill=TEXT,
             font=("Segoe UI", 12),
-            width=results_w - 52,
+            width=max(320, results_cw - 220),
             anchor="nw",
         )
         self.output = CanvasOutputProxy(self.dashboard_canvas, output_item)
         self._canvas_button(
-            results_x + results_w - 214,
-            results_y + 30,
+            results_x + results_w - CARD_PADDING - 170,
+            results_cy + 6,
             "View Technical Details",
             self.view_technical_details,
             170,
