@@ -498,16 +498,17 @@ function New-PrinterHealthHtml {
 <h3>Printer Health Summary</h3>
 <table>
 <tr><td><strong>Default Printer</strong></td><td>$(ConvertTo-ReportHtml $summary.DefaultPrinter)</td></tr>
+<tr><td><strong>Spooler Service</strong></td><td>$(ConvertTo-ReportHtml $summary.SpoolerServiceStatus)</td></tr>
 <tr><td><strong>Installed Printers</strong></td><td>$(ConvertTo-ReportHtml $summary.InstalledPrinters)</td></tr>
-<tr><td><strong>Online</strong></td><td>$(ConvertTo-ReportHtml $summary.OnlinePrinters)</td></tr>
-<tr><td><strong>Offline</strong></td><td>$(ConvertTo-ReportHtml $summary.OfflinePrinters)</td></tr>
+<tr><td><strong>Printer Drivers</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterDriverCount)</td></tr>
+<tr><td><strong>Offline Printers</strong></td><td>$(ConvertTo-ReportHtml $summary.OfflinePrinters)</td></tr>
 <tr><td><strong>Queued Jobs</strong></td><td>$(ConvertTo-ReportHtml $summary.TotalQueuedJobs)</td></tr>
+<tr><td><strong>Printer Health Score</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterHealthScore)</td></tr>
+<tr><td><strong>Status</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterHealthStatus)</td></tr>
+<tr><td><strong>Online Printers</strong></td><td>$(ConvertTo-ReportHtml $summary.OnlinePrinters)</td></tr>
 <tr><td><strong>Stuck Jobs Estimate</strong></td><td>$(ConvertTo-ReportHtml $summary.StuckPrintJobsEstimate)</td></tr>
 <tr><td><strong>Oldest Queued Job</strong></td><td>$(ConvertTo-ReportHtml $summary.OldestQueuedJobAge)</td></tr>
-<tr><td><strong>Spooler Service</strong></td><td>$(ConvertTo-ReportHtml $summary.SpoolerServiceStatus)</td></tr>
-<tr><td><strong>Printer Drivers</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterDriverCount)</td></tr>
 <tr><td><strong>Microsoft Print to PDF</strong></td><td>$(ConvertTo-ReportHtml $summary.MicrosoftPrintToPDFPresent)</td></tr>
-<tr><td><strong>Printer Health Score</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterHealthScore)</td></tr>
 </table>
 <h3>Per-Printer Details</h3>
 <table>
@@ -1537,6 +1538,19 @@ function Get-PrinterRecommendations {
 
     $recommendations = @()
 
+    if ([int]$Summary.PrinterHealthScore -ge 90 -and
+        $Summary.SpoolerServiceStatus -eq "Running" -and
+        [int]$Summary.OfflinePrinters -eq 0 -and
+        [int]$Summary.TotalQueuedJobs -eq 0 -and
+        [int]$Summary.StuckPrintJobsEstimate -eq 0) {
+        return @(
+            "Printer subsystem healthy",
+            "No stuck jobs detected",
+            "Print spooler running normally",
+            "No action required"
+        )
+    }
+
     if ($Summary.SpoolerServiceStatus -ne "Running") {
         $recommendations += "The Windows print spooler is not running."
     }
@@ -1558,6 +1572,24 @@ function Get-PrinterRecommendations {
     }
 
     return @($recommendations)
+}
+
+function Get-PrinterHealthStatus {
+    param([object]$Summary)
+
+    if ([int]$Summary.PrinterHealthScore -ge 90 -and
+        $Summary.SpoolerServiceStatus -eq "Running" -and
+        [int]$Summary.OfflinePrinters -eq 0 -and
+        [int]$Summary.TotalQueuedJobs -eq 0 -and
+        [int]$Summary.StuckPrintJobsEstimate -eq 0) {
+        return "Healthy"
+    }
+
+    if ([int]$Summary.PrinterHealthScore -ge 70) {
+        return "Warning"
+    }
+
+    return "Needs Attention"
 }
 
 function Get-PrinterHealthScore {
@@ -1594,6 +1626,7 @@ function Get-PrinterHealth {
             PrinterDriverCount = 0
             MicrosoftPrintToPDFPresent = "Unknown"
             PrinterHealthScore = 100
+            PrinterHealthStatus = "Unknown"
             Recommendations = @("Printer Health requires Windows printer APIs. No printer checks were run in this environment.")
             SafetyNote = "Printer Health is read-only. No queues, services, printers, or drivers are changed."
         }
@@ -1682,10 +1715,12 @@ function Get-PrinterHealth {
         PrinterDriverCount = $drivers.Count
         MicrosoftPrintToPDFPresent = ConvertTo-YesNo -Value $microsoftPrintToPdf
         PrinterHealthScore = 100
+        PrinterHealthStatus = "Unknown"
         Recommendations = @()
         SafetyNote = "Printer Health is read-only. No queues, services, printers, or drivers are changed."
     }
     $summary.PrinterHealthScore = Get-PrinterHealthScore -Summary $summary
+    $summary.PrinterHealthStatus = Get-PrinterHealthStatus -Summary $summary
     $summary.Recommendations = Get-PrinterRecommendations -Summary $summary
 
     Set-ReportPrinterHealth -Summary $summary -Details $details
