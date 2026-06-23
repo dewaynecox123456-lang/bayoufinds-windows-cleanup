@@ -39,6 +39,9 @@ PURCHASE_URL = "https://bayoufinds.com/b/y3OJr"
 WINDOW_SIZE = "1200x760"
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 760
+STARTUP_WINDOW_SIZE = "1280x820"
+STARTUP_WINDOW_WIDTH = 1280
+STARTUP_WINDOW_HEIGHT = 820
 CONTENT_PADDING = 18
 SIDEBAR_WIDTH = 260
 HEADER_IMAGE_MAX_WIDTH = WINDOW_WIDTH - (CONTENT_PADDING * 2)
@@ -99,6 +102,49 @@ def is_process_elevated() -> str:
         return "Unknown"
 
 
+def get_startup_log_dirs() -> list[Path]:
+    candidate_dirs: list[Path] = [
+        get_default_log_folder(),
+        Path.cwd() / "BayouFinds_Cleanup_Logs",
+    ]
+
+    temp_dir = os.environ.get("TEMP")
+    if temp_dir:
+        candidate_dirs.append(Path(temp_dir) / "BayouFinds_Cleanup_Logs")
+
+    candidate_dirs.append(Path("/tmp") / "BayouFinds_Cleanup_Logs")
+    return candidate_dirs
+
+
+def append_startup_log(filename: str, lines: list[str]) -> Path | None:
+    for log_dir in get_startup_log_dirs():
+        log_path = log_dir / filename
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n".join(lines))
+                handle.write("\n")
+            return log_path
+        except Exception:
+            continue
+
+    return None
+
+
+def write_startup_checkpoint(message: str) -> Path | None:
+    return append_startup_log(
+        "gui_startup.log",
+        [
+            f"{datetime.now().isoformat(timespec='seconds')} - {message}",
+            f"  Python Executable: {sys.executable}",
+            f"  Current Working Directory: {Path.cwd()}",
+            f"  Script Path: {Path(__file__).resolve()}",
+            f"  Platform: {platform.platform()}",
+            f"  Running Elevated: {is_process_elevated()}",
+        ],
+    )
+
+
 def write_startup_crash_log(exc: BaseException) -> Path | None:
     lines = [
         "=" * 72,
@@ -117,26 +163,7 @@ def write_startup_crash_log(exc: BaseException) -> Path | None:
         "",
     ]
 
-    candidate_dirs = [
-        get_default_log_folder(),
-        Path.cwd() / "BayouFinds_Cleanup_Logs",
-        Path(os.environ.get("TEMP", "")) / "BayouFinds_Cleanup_Logs" if os.environ.get("TEMP") else None,
-        Path("/tmp") / "BayouFinds_Cleanup_Logs",
-    ]
-
-    for log_dir in candidate_dirs:
-        if log_dir is None:
-            continue
-        log_path = log_dir / "gui_crash.log"
-        try:
-            log_dir.mkdir(parents=True, exist_ok=True)
-            with log_path.open("a", encoding="utf-8") as handle:
-                handle.write("\n".join(lines))
-            return log_path
-        except Exception:
-            continue
-
-    return None
+    return append_startup_log("gui_crash.log", lines)
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -209,6 +236,37 @@ def center_window(window: Toplevel | Tk, width: int, height: int) -> None:
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
+def force_main_window_visible(root: Tk) -> None:
+    root.deiconify()
+    try:
+        root.state("normal")
+    except Exception:
+        pass
+
+    root.geometry(STARTUP_WINDOW_SIZE)
+    center_window(root, STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT)
+    root.update_idletasks()
+    root.lift()
+
+    try:
+        root.focus_force()
+    except Exception:
+        pass
+
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+
+    def clear_topmost() -> None:
+        try:
+            root.attributes("-topmost", False)
+        except Exception:
+            pass
+
+    root.after(750, clear_topmost)
+
+
 def show_splash_screen(root: Tk) -> None:
     splash = None
     try:
@@ -220,6 +278,7 @@ def show_splash_screen(root: Tk) -> None:
         style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 10))
 
         splash = Toplevel(root)
+        write_startup_checkpoint("splash shown")
         splash.overrideredirect(True)
         splash.configure(bg=BG)
         try:
@@ -257,12 +316,14 @@ def show_splash_screen(root: Tk) -> None:
 
         root.after(1400, close_splash)
         root.wait_window(splash)
+        write_startup_checkpoint("splash closed")
     except Exception:
         try:
             if splash and splash.winfo_exists():
                 splash.destroy()
         except Exception:
             pass
+        write_startup_checkpoint("splash closed")
 
 
 class BayouFindsCleanupGUI:
@@ -2195,7 +2256,10 @@ def main() -> None:
     root.withdraw()
     show_splash_screen(root)
     BayouFindsCleanupGUI(root)
-    root.deiconify()
+    write_startup_checkpoint("main window created")
+    force_main_window_visible(root)
+    write_startup_checkpoint("main window made visible")
+    write_startup_checkpoint("entering mainloop")
     root.mainloop()
 
 
