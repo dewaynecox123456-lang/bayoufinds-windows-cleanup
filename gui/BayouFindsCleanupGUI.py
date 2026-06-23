@@ -48,28 +48,29 @@ SPLASH_HEIGHT = 360
 SPLASH_IMAGE_MAX_WIDTH = 584
 SPLASH_IMAGE_MAX_HEIGHT = 292
 
-BG = "#15181c"
-SIDEBAR = "#1b1f24"
-PANEL = "#242a31"
-PANEL_ALT = "#2b323a"
-PANEL_SOFT = "#2b323a"
-CARD = "#242a31"
-CARD_SOFT = "#2b323a"
-CARD_BORDER = "#3a434d"
-RESULT_BG = "#1b1f24"
-CARD_HIGHLIGHT = "#5d8892"
-SHADOW = "#101316"
-GLOW = "#476b73"
-TEXT = "#f2f4f5"
-MUTED = "#b8bec5"
-ACCENT = "#5d8892"
-ACCENT_DARK = "#476b73"
-GOLD = "#c6a15b"
+BG = "#f4f6f8"
+SIDEBAR = "#ffffff"
+PANEL = "#ffffff"
+PANEL_ALT = "#eef2f6"
+PANEL_SOFT = "#f8fafc"
+CARD = "#ffffff"
+CARD_SOFT = "#ffffff"
+CARD_BORDER = "#d9e1ea"
+RESULT_BG = "#ffffff"
+CARD_HIGHLIGHT = "#2563eb"
+SHADOW = "#d9e1ea"
+GLOW = "#bfdbfe"
+TEXT = "#172033"
+MUTED = "#637083"
+BUTTON_TEXT = "#ffffff"
+ACCENT = "#2563eb"
+ACCENT_DARK = "#1d4ed8"
+GOLD = "#b45309"
 PRIMARY = ACCENT
 PRIMARY_DARK = ACCENT_DARK
-SUCCESS = "#6aa38d"
-WARNING = "#d2a15c"
-ERROR = "#c86f6f"
+SUCCESS = "#15803d"
+WARNING = "#b45309"
+ERROR = "#b91c1c"
 
 
 ADMIN_ONLY_ACTIONS = {
@@ -288,8 +289,8 @@ class BayouFindsCleanupGUI:
         style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 9))
         style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 24, "bold"))
         style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 11))
-        style.configure("SidebarTitle.TLabel", background=SIDEBAR, foreground="#fff7e8", font=("Segoe UI", 15, "bold"))
-        style.configure("SidebarMuted.TLabel", background=SIDEBAR, foreground="#b7d6d1", font=("Segoe UI", 9))
+        style.configure("SidebarTitle.TLabel", background=SIDEBAR, foreground=TEXT, font=("Segoe UI", 15, "bold"))
+        style.configure("SidebarMuted.TLabel", background=SIDEBAR, foreground=MUTED, font=("Segoe UI", 9))
         style.configure(
             "CardTitle.TLabel",
             background=CARD,
@@ -324,7 +325,7 @@ class BayouFindsCleanupGUI:
         style.configure(
             "Primary.TButton",
             background=PRIMARY,
-            foreground="#0b2727",
+            foreground=BUTTON_TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 14, "bold"),
@@ -332,13 +333,13 @@ class BayouFindsCleanupGUI:
         )
         style.map(
             "Primary.TButton",
-            background=[("active", PRIMARY_DARK), ("disabled", "#47665d")],
-            foreground=[("disabled", "#c4d1cd")],
+            background=[("active", PRIMARY_DARK), ("disabled", "#bfdbfe")],
+            foreground=[("disabled", "#ffffff")],
         )
         style.configure(
             "Action.TButton",
-            background="#1d595c",
-            foreground=TEXT,
+            background=PRIMARY,
+            foreground=BUTTON_TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
@@ -346,41 +347,41 @@ class BayouFindsCleanupGUI:
         )
         style.map(
             "Action.TButton",
-            background=[("active", ACCENT_DARK), ("disabled", "#1d3438")],
-            foreground=[("disabled", "#77928e")],
+            background=[("active", ACCENT_DARK), ("disabled", "#bfdbfe")],
+            foreground=[("disabled", "#ffffff")],
         )
         style.configure(
             "Secondary.TButton",
-            background=ACCENT_DARK,
+            background=PANEL_ALT,
             foreground=TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10),
             padding=(14, 10),
         )
-        style.map("Secondary.TButton", background=[("active", ACCENT), ("disabled", CARD)])
+        style.map("Secondary.TButton", background=[("active", "#e0e7ef"), ("disabled", CARD)])
         style.configure(
             "Sidebar.TButton",
             background=SIDEBAR,
-            foreground="#d8efea",
+            foreground=TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
             padding=(14, 10),
             anchor="w",
         )
-        style.map("Sidebar.TButton", background=[("active", "#16474b"), ("disabled", SIDEBAR)])
+        style.map("Sidebar.TButton", background=[("active", PANEL_ALT), ("disabled", SIDEBAR)])
         style.configure(
             "SidebarActive.TButton",
-            background="#1c6969",
-            foreground="#f7fffb",
+            background=PRIMARY,
+            foreground=BUTTON_TEXT,
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
             padding=(14, 10),
             anchor="w",
         )
-        style.map("SidebarActive.TButton", background=[("active", "#237b79")])
+        style.map("SidebarActive.TButton", background=[("active", PRIMARY_DARK)])
 
     def _set_icon(self) -> None:
         icon_path = self._asset_path("app_icon.ico")
@@ -394,9 +395,9 @@ class BayouFindsCleanupGUI:
         menu = ttk.Frame(self.root)
         self.root.option_add("*tearOff", False)
 
-        tk_menu = __import__("tkinter").Menu(self.root, bg=PANEL, fg=TEXT, activebackground=ACCENT)
-        file_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
-        help_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT)
+        tk_menu = __import__("tkinter").Menu(self.root, bg=PANEL, fg=TEXT, activebackground=ACCENT, activeforeground=BUTTON_TEXT)
+        file_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT, activeforeground=BUTTON_TEXT)
+        help_menu = __import__("tkinter").Menu(tk_menu, bg=PANEL, fg=TEXT, activebackground=ACCENT, activeforeground=BUTTON_TEXT)
 
         file_menu.add_command(label="Import License", command=self.import_license)
         file_menu.add_command(label="Activate Cleanup", command=self.purchase_license)
@@ -419,8 +420,8 @@ class BayouFindsCleanupGUI:
             )
             raise SystemExit("customtkinter is required")
 
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("dark-blue")
+        ctk.set_appearance_mode("light")
+        ctk.set_default_color_theme("blue")
 
         self.root.grid_columnconfigure(0, minsize=SIDEBAR_WIDTH, weight=0)
         self.root.grid_columnconfigure(1, weight=1)
@@ -461,17 +462,17 @@ class BayouFindsCleanupGUI:
                 text=label,
                 command=command,
                 fg_color=SIDEBAR,
-                hover_color=CARD_SOFT,
+                hover_color=PANEL_ALT,
                 text_color=TEXT,
                 anchor="w",
-                corner_radius=14,
+                corner_radius=8,
                 height=42,
                 font=("Segoe UI", 11, "bold"),
             )
             button.grid(row=index, column=0, sticky="ew", padx=18, pady=4)
             self.sidebar_buttons[label] = button
 
-        license_panel = self._ctk_card(sidebar, fg_color=CARD, corner_radius=18)
+        license_panel = self._ctk_card(sidebar, fg_color=CARD, corner_radius=8)
         license_panel.grid(row=9, column=0, sticky="ew", padx=18, pady=(10, 8))
         license_panel.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
@@ -504,7 +505,7 @@ class BayouFindsCleanupGUI:
             row=10,
             pady=(4, 4),
             fg_color=ACCENT_DARK,
-            hover_color=ACCENT,
+            hover_color=PRIMARY_DARK,
         )
         self._ctk_button(
             sidebar,
@@ -513,15 +514,15 @@ class BayouFindsCleanupGUI:
             row=11,
             pady=(4, 8),
             fg_color=ACCENT_DARK,
-            hover_color=ACCENT,
+            hover_color=PRIMARY_DARK,
         )
 
-        reminder = self._ctk_card(sidebar, fg_color=CARD_SOFT, corner_radius=18)
+        reminder = self._ctk_card(sidebar, fg_color=CARD_SOFT, corner_radius=8)
         reminder.grid(row=12, column=0, sticky="ew", padx=18, pady=(0, 18))
         ctk.CTkLabel(
             reminder,
             text="Protected by Default",
-            text_color=GOLD,
+            text_color=SUCCESS,
             font=("Segoe UI", 10, "bold"),
         ).grid(row=0, column=0, sticky="w", padx=14, pady=(12, 0))
         ctk.CTkLabel(
@@ -562,7 +563,7 @@ class BayouFindsCleanupGUI:
             text=APP_VERSION,
             text_color=ACCENT,
             fg_color=CARD_SOFT,
-            corner_radius=14,
+            corner_radius=8,
             width=92,
             height=34,
             font=("Segoe UI", 11, "bold"),
@@ -578,7 +579,7 @@ class BayouFindsCleanupGUI:
         self.total_recovered_value_label = self._add_ctk_metric(metrics, 3, "Total Recovered", "No cleanup yet", "Saved over time on this PC.")
         self.health_score_value_label = self._add_ctk_metric(metrics, 4, "PC Health Score", "Not scanned yet", "Cleanup readiness score.")
 
-        status_bar = self._ctk_card(main, fg_color=CARD_SOFT, corner_radius=20)
+        status_bar = self._ctk_card(main, fg_color=CARD_SOFT, corner_radius=8)
         status_bar.grid(row=2, column=0, sticky="ew", pady=(0, 16))
         for column in range(3):
             status_bar.grid_columnconfigure(column, weight=1, uniform="status")
@@ -591,7 +592,7 @@ class BayouFindsCleanupGUI:
         middle.grid_columnconfigure(0, weight=1, uniform="middle")
         middle.grid_columnconfigure(1, weight=1, uniform="middle")
 
-        self.action_card = self._ctk_card(middle, fg_color=CARD_SOFT, corner_radius=22)
+        self.action_card = self._ctk_card(middle, fg_color=CARD_SOFT, corner_radius=8)
         self.action_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         self.action_card.grid_columnconfigure(0, weight=1)
         self.action_buttons_frame = ctk.CTkFrame(self.action_card, fg_color="transparent")
@@ -622,13 +623,13 @@ class BayouFindsCleanupGUI:
         )
         self.action_status_label.grid(row=2, column=0, sticky="ew", padx=22, pady=(0, 22))
 
-        top_hogs = self._ctk_card(middle, fg_color=CARD, corner_radius=22)
+        top_hogs = self._ctk_card(middle, fg_color=CARD, corner_radius=8)
         top_hogs.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         top_hogs.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             top_hogs,
-            text="Top Space Hogs",
-            text_color=GOLD,
+            text="System Health Overview",
+            text_color=TEXT,
             font=("Segoe UI", 16, "bold"),
             anchor="w",
         ).grid(row=0, column=0, sticky="ew", padx=22, pady=(22, 6))
@@ -643,7 +644,7 @@ class BayouFindsCleanupGUI:
         )
         self.top_hogs_label.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 22))
 
-        results = self._ctk_card(main, fg_color=CARD_SOFT, corner_radius=22)
+        results = self._ctk_card(main, fg_color=CARD_SOFT, corner_radius=8)
         results.grid(row=4, column=0, sticky="nsew")
         results.grid_columnconfigure(0, weight=1)
         results.grid_rowconfigure(2, weight=1)
@@ -678,8 +679,9 @@ class BayouFindsCleanupGUI:
             results,
             fg_color=RESULT_BG,
             text_color=TEXT,
-            border_width=0,
-            corner_radius=16,
+            border_width=1,
+            border_color=CARD_BORDER,
+            corner_radius=10,
             wrap="word",
             font=("Segoe UI", 12),
             height=150,
@@ -697,7 +699,10 @@ class BayouFindsCleanupGUI:
     def _set_active_nav(self, label: str) -> None:
         for button_label, button in self.sidebar_buttons.items():
             if hasattr(button, "configure"):
-                button.configure(fg_color=CARD_SOFT if button_label == label else SIDEBAR)
+                if button_label == label:
+                    button.configure(fg_color=PRIMARY, hover_color=PRIMARY_DARK, text_color=BUTTON_TEXT)
+                else:
+                    button.configure(fg_color=SIDEBAR, hover_color=PANEL_ALT, text_color=TEXT)
 
     def _ctk_card(self, parent, fg_color: str = CARD, corner_radius: int = 18):
         return ctk.CTkFrame(parent, fg_color=fg_color, corner_radius=corner_radius, border_width=1, border_color=CARD_BORDER)
@@ -719,7 +724,7 @@ class BayouFindsCleanupGUI:
             command=command,
             fg_color=fg_color,
             hover_color=hover_color,
-            text_color=TEXT,
+            text_color=BUTTON_TEXT,
             corner_radius=8,
             height=40,
             font=("Segoe UI", 10, "bold"),
@@ -738,7 +743,7 @@ class BayouFindsCleanupGUI:
             width=width,
             fg_color=ACCENT_DARK,
             hover_color=ACCENT,
-            text_color=TEXT,
+            text_color=BUTTON_TEXT,
             corner_radius=8,
             height=38,
             font=("Segoe UI", 10, "bold"),
@@ -748,7 +753,7 @@ class BayouFindsCleanupGUI:
         return button
 
     def _add_ctk_metric(self, parent, column: int, title: str, value: str, helper: str):
-        card = self._ctk_card(parent, fg_color=CARD, corner_radius=20)
+        card = self._ctk_card(parent, fg_color=CARD, corner_radius=8)
         card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0 if column == 4 else 8))
         card.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(card, text=title, text_color=MUTED, font=("Segoe UI", 10, "bold"), anchor="w").grid(
@@ -882,8 +887,8 @@ class BayouFindsCleanupGUI:
             command=command,
             fg_color=fg_color,
             hover_color=hover_color,
-            text_color=text_color,
-            corner_radius=14,
+            text_color=BUTTON_TEXT,
+            corner_radius=8,
             height=42,
             font=("Segoe UI", 11, "bold"),
         )
@@ -1566,7 +1571,7 @@ class BayouFindsCleanupGUI:
             health_score = int(stats.get("PCHealthScore") or health_score)
 
         self._set_dashboard_value(self.recoverable_value_label, self._format_bytes(recoverable), TEXT)
-        self._set_dashboard_value(self.cleanup_time_value_label, self._cleanup_time_estimate(recoverable), GOLD)
+        self._set_dashboard_value(self.cleanup_time_value_label, self._cleanup_time_estimate(recoverable), PRIMARY)
         if report.get("RunMode") == "Preview":
             files_identified = sum(int(category.get("EstimatedFiles") or 0) for category in categories if isinstance(category, dict))
             self._set_dashboard_value(self.recovered_run_value_label, f"{files_identified} items found", SUCCESS)
@@ -1602,7 +1607,7 @@ class BayouFindsCleanupGUI:
             f"Total Recovered: {self._format_bytes(total_recovered)}",
             f"PC Health Score: {health_score}/100",
             "",
-            "Top Space Hogs",
+            "System Health Overview",
             *self._top_space_hog_lines(categories),
             "",
             "Cleanup breakdown",
