@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="680" viewBox="0 0 1400 680" role="img" aria-labelledby="title desc">
+  <title id="title">BayouFinds Cleanup terminal preview</title>
+  <desc id="desc">A terminal mockup showing BayouFinds Windows Cleanup preview output.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#061a1a"/>
+      <stop offset="1" stop-color="#102f2d"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="680" rx="34" fill="url(#bg)"/>
+  <g transform="translate(96 74)" filter="url(#shadow)">
+    <rect width="1208" height="532" rx="28" fill="#071d1d" stroke="#bdeee7" stroke-opacity="0.22"/>
+    <rect width="1208" height="64" rx="28" fill="#0f3937"/>
+    <circle cx="42" cy="32" r="10" fill="#ff6b6b" opacity="0.9"/>
+    <circle cx="76" cy="32" r="10" fill="#f4c542" opacity="0.9"/>
+    <circle cx="110" cy="32" r="10" fill="#42d392" opacity="0.9"/>
+    <text x="154" y="40" fill="#d6f3ef" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">Administrator: PowerShell — BayouFinds Windows Cleanup</text>
+
+    <g font-family="Cascadia Mono, Consolas, monospace" font-size="28">
+      <text x="54" y="128" fill="#2be0cb">PS C:\BayouFinds&gt;</text>
+      <text x="334" y="128" fill="#eaf8f5">.\BayouFinds_Windows_Cleanup.ps1 -Mode Preview</text>
+
+      <text x="54" y="192" fill="#d6a84f">2026-06-22 20:15:02</text>
+      <text x="340" y="192" fill="#eaf8f5">BayouFinds Windows Cleanup started.</text>
+
+      <text x="54" y="244" fill="#d6a84f">SESSION</text>
+      <text x="210" y="244" fill="#cde8e4">Preview only — no files removed.</text>
+
+      <text x="54" y="304" fill="#42d392">OK</text>
+      <text x="128" y="304" fill="#eaf8f5">User temp scan complete</text>
+      <text x="780" y="304" fill="#9fded6">Estimated: 1.4 GB</text>
+
+      <text x="54" y="356" fill="#42d392">OK</text>
+      <text x="128" y="356" fill="#eaf8f5">Browser cache checked</text>
+      <text x="780" y="356" fill="#9fded6">Skipped if running</text>
+
+      <text x="54" y="408" fill="#f4c542">HOLD</text>
+      <text x="128" y="408" fill="#eaf8f5">Windows Update reset</text>
+      <text x="780" y="408" fill="#9fded6">Manual confirmation required</text>
+
+      <text x="54" y="460" fill="#f4c542">HOLD</text>
+      <text x="128" y="460" fill="#eaf8f5">Prefetch cleanup</text>
+      <text x="780" y="460" fill="#9fded6">Disabled by default</text>
+
+      <text x="54" y="520" fill="#2be0cb">REPORT</text>
+      <text x="178" y="520" fill="#eaf8f5">Desktop\BayouFinds_Cleanup_Logs\preview_20260622.html</text>
+    </g>
+  </g>
+</svg>
