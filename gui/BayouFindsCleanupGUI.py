@@ -11,6 +11,8 @@ import sys
 import threading
 import webbrowser
 import ctypes
+import platform
+import traceback
 from datetime import datetime
 from math import ceil
 from pathlib import Path
@@ -78,6 +80,63 @@ ADMIN_ONLY_ACTIONS = {
     "Repair Windows Files",
     "Repair Windows Networking",
 }
+
+
+def get_default_log_folder() -> Path:
+    desktop = Path.home() / "Desktop"
+    if not desktop.exists():
+        desktop = Path.home()
+    return desktop / "BayouFinds_Cleanup_Logs"
+
+
+def is_process_elevated() -> str:
+    if os.name != "nt":
+        return "Unknown"
+
+    try:
+        return "Yes" if ctypes.windll.shell32.IsUserAnAdmin() else "No"
+    except Exception:
+        return "Unknown"
+
+
+def write_startup_crash_log(exc: BaseException) -> Path | None:
+    lines = [
+        "=" * 72,
+        f"Timestamp: {datetime.now().isoformat(timespec='seconds')}",
+        f"Exception Type: {type(exc).__name__}",
+        f"Exception Message: {exc}",
+        f"Python Executable: {sys.executable}",
+        f"Current Working Directory: {Path.cwd()}",
+        f"Script Path: {Path(__file__).resolve()}",
+        f"Platform: {platform.platform()}",
+        f"Python Version: {platform.python_version()}",
+        f"Running Elevated: {is_process_elevated()}",
+        "",
+        "Traceback:",
+        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        "",
+    ]
+
+    candidate_dirs = [
+        get_default_log_folder(),
+        Path.cwd() / "BayouFinds_Cleanup_Logs",
+        Path(os.environ.get("TEMP", "")) / "BayouFinds_Cleanup_Logs" if os.environ.get("TEMP") else None,
+        Path("/tmp") / "BayouFinds_Cleanup_Logs",
+    ]
+
+    for log_dir in candidate_dirs:
+        if log_dir is None:
+            continue
+        log_path = log_dir / "gui_crash.log"
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n".join(lines))
+            return log_path
+        except Exception:
+            continue
+
+    return None
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -151,40 +210,59 @@ def center_window(window: Toplevel | Tk, width: int, height: int) -> None:
 
 
 def show_splash_screen(root: Tk) -> None:
-    style = ttk.Style()
-    style.theme_use("clam")
-    style.configure("TFrame", background=BG)
-    style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 22, "bold"))
-    style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 12))
-    style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 10))
+    splash = None
+    try:
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TFrame", background=BG)
+        style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 22, "bold"))
+        style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 12))
+        style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 10))
 
-    splash = Toplevel(root)
-    splash.overrideredirect(True)
-    splash.configure(bg=BG)
-    splash.attributes("-topmost", True)
-    center_window(splash, SPLASH_WIDTH, SPLASH_HEIGHT)
+        splash = Toplevel(root)
+        splash.overrideredirect(True)
+        splash.configure(bg=BG)
+        try:
+            splash.attributes("-topmost", True)
+        except Exception:
+            pass
+        center_window(splash, SPLASH_WIDTH, SPLASH_HEIGHT)
 
-    container = ttk.Frame(splash, padding=18)
-    container.pack(fill=BOTH, expand=True)
+        container = ttk.Frame(splash, padding=18)
+        container.pack(fill=BOTH, expand=True)
 
-    splash_path = find_asset_path("splash.png")
-    splash_image = fit_photo_image(
-        splash_path,
-        SPLASH_IMAGE_MAX_WIDTH,
-        SPLASH_IMAGE_MAX_HEIGHT,
-        allow_upscale=True,
-    ) if splash_path else None
+        splash_path = find_asset_path("splash.png")
+        splash_image = fit_photo_image(
+            splash_path,
+            SPLASH_IMAGE_MAX_WIDTH,
+            SPLASH_IMAGE_MAX_HEIGHT,
+            allow_upscale=True,
+        ) if splash_path else None
 
-    if splash_image:
-        splash.image_cache = [splash_image]
-        ttk.Label(container, image=splash_image, background=BG).pack(expand=True, anchor="center")
-    else:
-        ttk.Label(container, text="BayouFinds", style="Header.TLabel").pack(pady=(70, 8))
-        ttk.Label(container, text="Windows Cleanup", style="Subheader.TLabel").pack()
+        if splash_image:
+            splash.image_cache = [splash_image]
+            ttk.Label(container, image=splash_image, background=BG).pack(expand=True, anchor="center")
+        else:
+            ttk.Label(container, text="BayouFinds", style="Header.TLabel").pack(pady=(70, 8))
+            ttk.Label(container, text="Windows Cleanup", style="Subheader.TLabel").pack()
 
-    ttk.Label(container, text=WINDOW_TITLE, style="Muted.TLabel").pack(pady=(14, 0))
-    root.after(2400, splash.destroy)
-    root.wait_window(splash)
+        ttk.Label(container, text=WINDOW_TITLE, style="Muted.TLabel").pack(pady=(14, 0))
+
+        def close_splash() -> None:
+            try:
+                if splash and splash.winfo_exists():
+                    splash.destroy()
+            except Exception:
+                pass
+
+        root.after(1400, close_splash)
+        root.wait_window(splash)
+    except Exception:
+        try:
+            if splash and splash.winfo_exists():
+                splash.destroy()
+        except Exception:
+            pass
 
 
 class BayouFindsCleanupGUI:
@@ -197,7 +275,7 @@ class BayouFindsCleanupGUI:
 
         self.base_dir = self._get_base_dir()
         self.script_path = self._find_cleanup_script()
-        self.log_folder = Path.home() / "Desktop" / "BayouFinds_Cleanup_Logs"
+        self.log_folder = get_default_log_folder()
         self.output_queue: queue.Queue[tuple[str, str | int | None]] = queue.Queue()
         self.worker_thread: threading.Thread | None = None
         self.current_process: subprocess.Popen[str] | None = None
@@ -221,18 +299,10 @@ class BayouFindsCleanupGUI:
         self._poll_output_queue()
 
     def _is_gui_elevated(self) -> bool:
-        if os.name != "nt":
-            return False
-
-        try:
-            return bool(ctypes.windll.shell32.IsUserAnAdmin())
-        except Exception:
-            return False
+        return is_process_elevated() == "Yes"
 
     def _gui_elevated_text(self) -> str:
-        if os.name != "nt":
-            return "Unknown"
-        return "Yes" if self.gui_elevated else "No"
+        return is_process_elevated()
 
     def _get_base_dir(self) -> Path:
         if getattr(sys, "frozen", False):
@@ -2062,12 +2132,65 @@ class BayouFindsCleanupGUI:
         ttk.Button(frame, text="Close", style="Secondary.TButton", command=about.destroy).pack(anchor="e")
 
 
-def main() -> None:
-    if ctk is None:
-        raise SystemExit("customtkinter is required. Install it with: python -m pip install customtkinter")
+def run_self_test() -> int:
+    print(f"{APP_NAME} {APP_VERSION} startup self-test")
 
-    ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("dark-blue")
+    failures: list[str] = []
+    if ctk is None:
+        failures.append("customtkinter is not installed")
+
+    required_colors = {
+        "BG": BG,
+        "SIDEBAR": SIDEBAR,
+        "CARD": CARD,
+        "TEXT": TEXT,
+        "PRIMARY": PRIMARY,
+        "SUCCESS": SUCCESS,
+        "WARNING": WARNING,
+        "ERROR": ERROR,
+    }
+    for name, value in required_colors.items():
+        if not isinstance(value, str) or not value.startswith("#") or len(value) != 7:
+            failures.append(f"invalid theme color: {name}={value!r}")
+
+    base_dir = Path(__file__).resolve().parents[1]
+    script_path = base_dir / "BayouFinds_Windows_Cleanup.ps1"
+    if not script_path.exists():
+        failures.append(f"cleanup engine script not found: {script_path}")
+
+    log_dir = get_default_log_folder()
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        failures.append(f"could not create log directory {log_dir}: {exc}")
+
+    print(f"Python executable: {sys.executable}")
+    print(f"Script path: {Path(__file__).resolve()}")
+    print(f"Working directory: {Path.cwd()}")
+    print(f"Platform: {platform.platform()}")
+    print(f"Running elevated: {is_process_elevated()}")
+    print(f"Cleanup engine: {script_path}")
+    print(f"Log directory: {log_dir}")
+
+    if failures:
+        print("Self-test failed:")
+        for failure in failures:
+            print(f"- {failure}")
+        return 1
+
+    print("Self-test passed.")
+    return 0
+
+
+def main() -> None:
+    if "--self-test" in sys.argv:
+        raise SystemExit(run_self_test())
+
+    if ctk is None:
+        raise RuntimeError("customtkinter is required. Install it with: python -m pip install customtkinter")
+
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
     root = ctk.CTk()
     root.withdraw()
     show_splash_screen(root)
@@ -2077,4 +2200,15 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException as exc:
+        log_path = write_startup_crash_log(exc)
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        if log_path:
+            print(f"Startup crash log written to: {log_path}", file=sys.stderr)
+        else:
+            print("Startup crash log could not be written.", file=sys.stderr)
+        raise
