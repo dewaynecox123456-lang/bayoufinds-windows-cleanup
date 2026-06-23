@@ -91,6 +91,7 @@ function New-CleanupReportModel {
         CleanupTargetsEstimated = 0
         CleanupCategoriesProcessed = @()
         CleanupCategories = @()
+        BrowserHealthSummary = [ordered]@{}
         BrowserHealth = @()
         NetworkHealth = [ordered]@{}
         NetworkFirstAid = @()
@@ -152,10 +153,16 @@ function Add-ReportBrowserBackup {
 }
 
 function Set-ReportBrowserHealth {
-    param([object[]]$BrowserHealth)
+    param(
+        [object[]]$BrowserHealth,
+        [object]$Summary = $null
+    )
 
     if ($script:CleanupReport) {
         $script:CleanupReport.BrowserHealth = @($BrowserHealth)
+        if ($Summary) {
+            $script:CleanupReport.BrowserHealthSummary = $Summary
+        }
     }
 }
 
@@ -407,16 +414,37 @@ function New-BrowserHealthHtml {
         return "<h2>Browser Health</h2><p>No Browser Health scan results were recorded for this run.</p>"
     }
 
+    $summary = $script:CleanupReport.BrowserHealthSummary
+    $defaultBrowser = if ($summary -and $summary.DefaultBrowser) { $summary.DefaultBrowser } else { "Unknown" }
+    $totalProfiles = if ($summary -and $null -ne $summary.TotalProfiles) { $summary.TotalProfiles } else { "Unknown" }
+    $totalExtensions = if ($summary -and $null -ne $summary.TotalExtensions) { $summary.TotalExtensions } else { "Unknown" }
+    $totalCache = if ($summary -and $summary.TotalCacheSize) { $summary.TotalCacheSize } else { "Unknown" }
+    $runningBrowsers = if ($summary -and $summary.RunningBrowsers -and $summary.RunningBrowsers.Count -gt 0) {
+        (@($summary.RunningBrowsers) | ForEach-Object { "$($_.Name) ($($_.ProcessCount))" }) -join ", "
+    }
+    else {
+        "None detected"
+    }
+
     $rows = ""
     foreach ($browser in @($script:CleanupReport.BrowserHealth)) {
-        $rows += "<tr><td>$(ConvertTo-ReportHtml $browser.Name)</td><td>$(ConvertTo-ReportHtml $browser.Version)</td><td>$(ConvertTo-ReportHtml $browser.DefaultBrowser)</td><td>$(ConvertTo-ReportHtml $browser.CacheSize)</td><td>$(ConvertTo-ReportHtml $browser.ExtensionCount)</td><td>$(ConvertTo-ReportHtml $browser.UpdateStatus)</td></tr>`n"
+        $rows += "<tr><td>$(ConvertTo-ReportHtml $browser.Name)</td><td>$(ConvertTo-ReportHtml $browser.Status)</td><td>$(ConvertTo-ReportHtml $browser.Version)</td><td>$(ConvertTo-ReportHtml $browser.DefaultBrowser)</td><td>$(ConvertTo-ReportHtml $browser.ProfileCount)</td><td>$(ConvertTo-ReportHtml $browser.ExtensionCount)</td><td>$(ConvertTo-ReportHtml $browser.CacheSize)</td><td>$(ConvertTo-ReportHtml $browser.ProcessStatus)</td><td>$(ConvertTo-ReportHtml $browser.UpdateStatus)</td></tr>`n"
     }
 
     return @"
 <h2>Browser Health</h2>
-<p>Browser Health checks Chrome, Edge, and Firefox without collecting passwords, cookies, browsing history, or private browser data.</p>
+<p>Browser Health checks Chrome, Edge, and Firefox install status, versions, profiles, extensions, cache estimates, default browser status, and running browser processes. It does not collect passwords, cookies, browsing history, autofill, or private browser data.</p>
 <table>
-<tr><td><strong>Browser</strong></td><td><strong>Version</strong></td><td><strong>Default Browser</strong></td><td><strong>Cache Estimate</strong></td><td><strong>Extensions</strong></td><td><strong>Update Status</strong></td></tr>
+<tr><td><strong>Default Browser</strong></td><td>$(ConvertTo-ReportHtml $defaultBrowser)</td></tr>
+<tr><td><strong>Total Profiles</strong></td><td>$(ConvertTo-ReportHtml $totalProfiles)</td></tr>
+<tr><td><strong>Total Extensions</strong></td><td>$(ConvertTo-ReportHtml $totalExtensions)</td></tr>
+<tr><td><strong>Total Browser Cache Estimate</strong></td><td>$(ConvertTo-ReportHtml $totalCache)</td></tr>
+<tr><td><strong>Browser Processes Running</strong></td><td>$(ConvertTo-ReportHtml $runningBrowsers)</td></tr>
+<tr><td><strong>Cleanup Metrics</strong></td><td>Not applicable - Browser Health is a health report, not a cleanup scan.</td></tr>
+</table>
+<h3>Browser Details</h3>
+<table>
+<tr><td><strong>Browser</strong></td><td><strong>Status</strong></td><td><strong>Version</strong></td><td><strong>Default Browser</strong></td><td><strong>Profiles</strong></td><td><strong>Extensions</strong></td><td><strong>Cache Estimate</strong></td><td><strong>Running Now</strong></td><td><strong>Update Status</strong></td></tr>
 $rows
 </table>
 "@
@@ -504,6 +532,27 @@ function Write-HtmlReport {
     $reportRunMode = if ($script:CleanupReport) { $script:CleanupReport.RunMode } else { $null }
     $cleanupStatus = Get-ReportCleanupStatus -RunMode $reportRunMode
     $potentialRecovery = Format-ReportBytes -Bytes $recoverableBytes
+    $summaryItemsHtml = $null
+    if ($reportRunMode -eq "BrowserHealth") {
+        $browserSummary = if ($script:CleanupReport) { $script:CleanupReport.BrowserHealthSummary } else { $null }
+        $browsersChecked = if ($browserSummary -and $null -ne $browserSummary.BrowsersChecked) { $browserSummary.BrowsersChecked } else { 0 }
+        $installedBrowsers = if ($browserSummary -and $null -ne $browserSummary.InstalledBrowsers) { $browserSummary.InstalledBrowsers } else { 0 }
+        $runningCount = if ($browserSummary -and $browserSummary.RunningBrowsers) { @($browserSummary.RunningBrowsers).Count } else { 0 }
+        $summaryItemsHtml = @"
+<div class="summary-item"><div class="summary-label">Browsers Checked</div><div class="summary-value">$browsersChecked</div></div>
+<div class="summary-item"><div class="summary-label">Installed Browsers</div><div class="summary-value">$installedBrowsers</div></div>
+<div class="summary-item"><div class="summary-label">Browser Processes</div><div class="summary-value">$runningCount running</div></div>
+<div class="summary-item"><div class="summary-label">Cleanup Metrics</div><div class="summary-value">Not applicable</div></div>
+"@
+    }
+    else {
+        $summaryItemsHtml = @"
+<div class="summary-item"><div class="summary-label">Potential Recovery</div><div class="summary-value">$potentialRecovery</div></div>
+<div class="summary-item"><div class="summary-label">Files Identified</div><div class="summary-value">$filesIdentified</div></div>
+<div class="summary-item"><div class="summary-label">Categories Scanned</div><div class="summary-value">$categoriesScanned</div></div>
+<div class="summary-item"><div class="summary-label">Cleanup Status</div><div class="summary-value">$cleanupStatus</div></div>
+"@
+    }
     $browserHealthHtml = New-BrowserHealthHtml
     $networkHealthHtml = New-NetworkHealthHtml
     $networkFirstAidHtml = New-NetworkFirstAidHtml
@@ -534,10 +583,7 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <p class="badge">$LicenseMode</p>
 
 <div class="summary">
-<div class="summary-item"><div class="summary-label">Potential Recovery</div><div class="summary-value">$potentialRecovery</div></div>
-<div class="summary-item"><div class="summary-label">Files Identified</div><div class="summary-value">$filesIdentified</div></div>
-<div class="summary-item"><div class="summary-label">Categories Scanned</div><div class="summary-value">$categoriesScanned</div></div>
-<div class="summary-item"><div class="summary-label">Cleanup Status</div><div class="summary-value">$cleanupStatus</div></div>
+$summaryItemsHtml
 </div>
 
 <table>
@@ -547,9 +593,9 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <tr><td><strong>User</strong></td><td>$userName</td></tr>
 <tr><td><strong>Started</strong></td><td>$($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Ended</strong></td><td>$($endTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
-<tr><td><strong>Estimated Cleanup Targets</strong></td><td>$EstimatedCleanupTargets</td></tr>
-<tr><td><strong>Potential Recovery</strong></td><td>$recoverableBytes bytes</td></tr>
-<tr><td><strong>Recovered This Run</strong></td><td>$recoveredBytes bytes</td></tr>
+<tr><td><strong>Estimated Cleanup Targets</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { $EstimatedCleanupTargets })</td></tr>
+<tr><td><strong>Potential Recovery</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { "$recoverableBytes bytes" })</td></tr>
+<tr><td><strong>Recovered This Run</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { "$recoveredBytes bytes" })</td></tr>
 <tr><td><strong>Total Recovered</strong></td><td>$totalRecoveredBytes bytes</td></tr>
 <tr><td><strong>PC Health Score</strong></td><td>$pcHealthScore / 100</td></tr>
 <tr><td><strong>Log File</strong></td><td>$LogFile</td></tr>
@@ -959,6 +1005,27 @@ function Get-DefaultBrowserProgId {
     }
 }
 
+function Get-BrowserNameFromProgId {
+    param([string]$ProgId)
+
+    if (!$ProgId) {
+        return "Unknown"
+    }
+
+    $normalized = $ProgId.ToLowerInvariant()
+    if ($normalized -like "*chrome*") {
+        return "Google Chrome"
+    }
+    if ($normalized -like "*edge*" -or $normalized -like "*mse*") {
+        return "Microsoft Edge"
+    }
+    if ($normalized -like "*firefox*") {
+        return "Mozilla Firefox"
+    }
+
+    return "Unknown ($ProgId)"
+}
+
 function Get-BrowserDefaultStatus {
     param(
         [string]$Browser,
@@ -981,6 +1048,37 @@ function Get-BrowserDefaultStatus {
     }
 
     return "No"
+}
+
+function Get-FirstExistingPath {
+    param([object[]]$Paths)
+
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) {
+            continue
+        }
+
+        if (Test-Path -Path ([string]$path) -PathType Leaf) {
+            return [string]$path
+        }
+    }
+
+    return $null
+}
+
+function Get-BrowserProcessCount {
+    param([string[]]$ProcessNames)
+
+    $count = 0
+    foreach ($processName in @($ProcessNames)) {
+        if ([string]::IsNullOrWhiteSpace($processName)) {
+            continue
+        }
+
+        $count += @(Get-Process -Name $processName -ErrorAction SilentlyContinue).Count
+    }
+
+    return $count
 }
 
 function Get-ChromiumProfiles {
@@ -1073,19 +1171,26 @@ function New-BrowserHealthResult {
         [bool]$Installed,
         [string]$Version,
         [string]$DefaultBrowserStatus,
+        [nullable[int]]$ProfileCount,
         [nullable[int64]]$CacheBytes,
         [nullable[int]]$ExtensionCount,
+        [int]$ProcessCount,
         [string]$UpdateStatus
     )
 
     return [ordered]@{
         Name = $Name
         Installed = $Installed
+        Status = if ($Installed) { "Installed" } else { "Not found" }
         Version = Format-ReportValue -Value $Version
         DefaultBrowser = Format-ReportValue -Value $DefaultBrowserStatus
+        ProfileCount = $ProfileCount
         CacheBytes = $CacheBytes
         CacheSize = if ($null -ne $CacheBytes) { Format-ReportBytes -Bytes $CacheBytes } else { "Unknown" }
         ExtensionCount = $ExtensionCount
+        ProcessCount = $ProcessCount
+        BrowserProcessesRunning = $ProcessCount -gt 0
+        ProcessStatus = if ($ProcessCount -gt 0) { "Running ($ProcessCount)" } else { "Not running" }
         UpdateStatus = if ($UpdateStatus) { $UpdateStatus } else { "Unknown" }
         ExePath = $ExePath
     }
@@ -1097,43 +1202,81 @@ function Get-BrowserHealth {
     $defaultProgId = Get-DefaultBrowserProgId
     $results = @()
 
-    $chromeExe = @(
+    $chromeExe = Get-FirstExistingPath -Paths @(
         (Join-Path -Path ${env:ProgramFiles} -ChildPath "Google\Chrome\Application\chrome.exe"),
         (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
         (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\Application\chrome.exe")
-    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    )
     $chromeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\User Data" } else { $null }
     $chromeProfiles = Get-ChromiumProfiles -UserDataPath $chromeUserData
     $chromeInstalled = [bool]$chromeExe -or (Test-Path -Path $chromeUserData -PathType Container)
     $chromeCacheBytes = if ($chromeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $chromeProfiles) } else { $null }
     $chromeExtensionCount = if ($chromeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $chromeProfiles } else { $null }
-    $results += New-BrowserHealthResult -Name "Google Chrome" -ExePath $chromeExe -Installed $chromeInstalled -Version (Get-FileVersionValue -Path $chromeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Google Chrome" -ProgId $defaultProgId) -CacheBytes $chromeCacheBytes -ExtensionCount $chromeExtensionCount -UpdateStatus "Unknown"
+    $chromeProcessCount = Get-BrowserProcessCount -ProcessNames @("chrome")
+    $results += New-BrowserHealthResult -Name "Google Chrome" -ExePath $chromeExe -Installed $chromeInstalled -Version (Get-FileVersionValue -Path $chromeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Google Chrome" -ProgId $defaultProgId) -ProfileCount $chromeProfiles.Count -CacheBytes $chromeCacheBytes -ExtensionCount $chromeExtensionCount -ProcessCount $chromeProcessCount -UpdateStatus "Unknown"
 
-    $edgeExe = @(
+    $edgeExe = Get-FirstExistingPath -Paths @(
         (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
         (Join-Path -Path ${env:ProgramFiles} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
         (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\Application\msedge.exe")
-    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    )
     $edgeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data" } else { $null }
     $edgeProfiles = Get-ChromiumProfiles -UserDataPath $edgeUserData
     $edgeInstalled = [bool]$edgeExe -or (Test-Path -Path $edgeUserData -PathType Container)
     $edgeCacheBytes = if ($edgeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $edgeProfiles) } else { $null }
     $edgeExtensionCount = if ($edgeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $edgeProfiles } else { $null }
-    $results += New-BrowserHealthResult -Name "Microsoft Edge" -ExePath $edgeExe -Installed $edgeInstalled -Version (Get-FileVersionValue -Path $edgeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Microsoft Edge" -ProgId $defaultProgId) -CacheBytes $edgeCacheBytes -ExtensionCount $edgeExtensionCount -UpdateStatus "Unknown"
+    $edgeProcessCount = Get-BrowserProcessCount -ProcessNames @("msedge")
+    $results += New-BrowserHealthResult -Name "Microsoft Edge" -ExePath $edgeExe -Installed $edgeInstalled -Version (Get-FileVersionValue -Path $edgeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Microsoft Edge" -ProgId $defaultProgId) -ProfileCount $edgeProfiles.Count -CacheBytes $edgeCacheBytes -ExtensionCount $edgeExtensionCount -ProcessCount $edgeProcessCount -UpdateStatus "Unknown"
 
-    $firefoxExe = @(
+    $firefoxExe = Get-FirstExistingPath -Paths @(
         (Join-Path -Path ${env:ProgramFiles} -ChildPath "Mozilla Firefox\firefox.exe"),
         (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Mozilla Firefox\firefox.exe"),
         (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Mozilla Firefox\firefox.exe")
-    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    )
     $firefoxProfiles = Get-FirefoxProfiles
     $firefoxInstalled = [bool]$firefoxExe -or $firefoxProfiles.Count -gt 0
     $firefoxCacheBytes = if ($firefoxProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-FirefoxCachePaths -Profiles $firefoxProfiles) } else { $null }
     $firefoxExtensionCount = if ($firefoxProfiles.Count -gt 0) { Get-FirefoxExtensionCount -Profiles $firefoxProfiles } else { $null }
-    $results += New-BrowserHealthResult -Name "Mozilla Firefox" -ExePath $firefoxExe -Installed $firefoxInstalled -Version (Get-FileVersionValue -Path $firefoxExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Mozilla Firefox" -ProgId $defaultProgId) -CacheBytes $firefoxCacheBytes -ExtensionCount $firefoxExtensionCount -UpdateStatus "Unknown"
+    $firefoxProcessCount = Get-BrowserProcessCount -ProcessNames @("firefox")
+    $results += New-BrowserHealthResult -Name "Mozilla Firefox" -ExePath $firefoxExe -Installed $firefoxInstalled -Version (Get-FileVersionValue -Path $firefoxExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Mozilla Firefox" -ProgId $defaultProgId) -ProfileCount $firefoxProfiles.Count -CacheBytes $firefoxCacheBytes -ExtensionCount $firefoxExtensionCount -ProcessCount $firefoxProcessCount -UpdateStatus "Unknown"
 
-    Set-ReportBrowserHealth -BrowserHealth $results
-    Add-ReportNote -Message "Browser Health reports browser install, version, cache estimate, and extension count only. Passwords, cookies, browsing history, and private browser data are not collected."
+    $totalCacheBytes = 0L
+    $totalProfiles = 0
+    $totalExtensions = 0
+    $runningBrowsers = @()
+    foreach ($browser in @($results)) {
+        if ($null -ne $browser.CacheBytes) {
+            $totalCacheBytes += [int64]$browser.CacheBytes
+        }
+        if ($null -ne $browser.ProfileCount) {
+            $totalProfiles += [int]$browser.ProfileCount
+        }
+        if ($null -ne $browser.ExtensionCount) {
+            $totalExtensions += [int]$browser.ExtensionCount
+        }
+        if ($browser.ProcessCount -gt 0) {
+            $runningBrowsers += [ordered]@{
+                Name = $browser.Name
+                ProcessCount = $browser.ProcessCount
+            }
+        }
+    }
+
+    $summary = [ordered]@{
+        DefaultBrowser = Get-BrowserNameFromProgId -ProgId $defaultProgId
+        DefaultBrowserProgId = Format-ReportValue -Value $defaultProgId
+        BrowsersChecked = $results.Count
+        InstalledBrowsers = @($results | Where-Object { $_.Installed }).Count
+        TotalProfiles = $totalProfiles
+        TotalExtensions = $totalExtensions
+        TotalCacheBytes = $totalCacheBytes
+        TotalCacheSize = Format-ReportBytes -Bytes $totalCacheBytes
+        RunningBrowsers = @($runningBrowsers)
+        PrivacyNote = "Browser Health does not collect passwords, cookies, browsing history, autofill, or private browser data."
+    }
+
+    Set-ReportBrowserHealth -BrowserHealth $results -Summary $summary
+    Add-ReportNote -Message "Browser Health reports browser install, version, default browser, profile count, extension count, cache estimate, and process count only. Passwords, cookies, browsing history, autofill, and private browser data are not collected."
     Write-Log "Browser Health scan complete."
     return $results
 }
@@ -2168,16 +2311,16 @@ function Invoke-CleanupRun {
         return
     }
 
-    $isWindowsPlatform = Test-WindowsPlatform
-    if (!$isWindowsPlatform) {
-        Write-Log "INFO: This tool is intended for Windows. Validation mode passed."
-        Add-ReportNote -Message "Windows-only checks were skipped because this validation run is not on Windows."
+    if ($RunMode -eq "BrowserHealth") {
+        Get-BrowserHealth | Out-Null
         Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
         return
     }
 
-    if ($RunMode -eq "BrowserHealth") {
-        Get-BrowserHealth | Out-Null
+    $isWindowsPlatform = Test-WindowsPlatform
+    if (!$isWindowsPlatform) {
+        Write-Log "INFO: This tool is intended for Windows. Validation mode passed."
+        Add-ReportNote -Message "Windows-only checks were skipped because this validation run is not on Windows."
         Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
         return
     }

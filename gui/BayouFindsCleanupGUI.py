@@ -1925,8 +1925,10 @@ class BayouFindsCleanupGUI:
                 f"{browser.get('Name') or 'Browser'}: {installed}",
                 f"- Version: {browser.get('Version') or 'Unknown'}",
                 f"- Default Browser: {browser.get('DefaultBrowser') or 'Unknown'}",
+                f"- Profiles: {browser.get('ProfileCount') if browser.get('ProfileCount') is not None else 'Unknown'}",
                 f"- Cache Estimate: {browser.get('CacheSize') or 'Unknown'}",
                 f"- Extensions: {extension_text}",
+                f"- Running Now: {browser.get('ProcessStatus') or 'Unknown'}",
                 f"- Update Status: {browser.get('UpdateStatus') or 'Unknown'}",
                 "",
             ])
