@@ -610,7 +610,7 @@ class BayouFindsCleanupGUI:
         sidebar.grid(row=0, column=0, sticky="nsew")
         sidebar.grid_propagate(False)
         sidebar.grid_columnconfigure(0, weight=1)
-        sidebar.grid_rowconfigure(8, weight=1)
+        sidebar.grid_rowconfigure(9, weight=1)
 
         ctk.CTkLabel(
             sidebar,
@@ -629,6 +629,7 @@ class BayouFindsCleanupGUI:
             ("Home", lambda: self._set_view("Home")),
             ("Scan", lambda: self._set_view("Scan")),
             ("Network Health", lambda: self._set_view("Network Health")),
+            ("Printer Health", lambda: self._set_view("Printer Health")),
             ("Cleanup", lambda: self._set_view("Cleanup")),
             ("Reports", lambda: self._set_view("Reports")),
             ("License", lambda: self._set_view("License")),
@@ -652,7 +653,7 @@ class BayouFindsCleanupGUI:
             self.sidebar_buttons[label] = button
 
         license_panel = self._ctk_card(sidebar, fg_color=CARD, corner_radius=8)
-        license_panel.grid(row=9, column=0, sticky="ew", padx=18, pady=(10, 8))
+        license_panel.grid(row=10, column=0, sticky="ew", padx=18, pady=(10, 8))
         license_panel.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             license_panel,
@@ -681,7 +682,7 @@ class BayouFindsCleanupGUI:
             sidebar,
             "Activate Cleanup",
             self.purchase_license,
-            row=10,
+            row=11,
             pady=(4, 4),
             fg_color=ACCENT_DARK,
             hover_color=PRIMARY_DARK,
@@ -690,14 +691,14 @@ class BayouFindsCleanupGUI:
             sidebar,
             "Import License",
             self.import_license,
-            row=11,
+            row=12,
             pady=(4, 8),
             fg_color=ACCENT_DARK,
             hover_color=PRIMARY_DARK,
         )
 
         reminder = self._ctk_card(sidebar, fg_color=CARD_SOFT, corner_radius=8)
-        reminder.grid(row=12, column=0, sticky="ew", padx=18, pady=(0, 18))
+        reminder.grid(row=13, column=0, sticky="ew", padx=18, pady=(0, 18))
         ctk.CTkLabel(
             reminder,
             text="Protected by Default",
@@ -960,6 +961,7 @@ class BayouFindsCleanupGUI:
             "Home": "Scan your PC to find and safely remove unnecessary files.",
             "Scan": "Run a safe scan to estimate recoverable space before cleanup.",
             "Network Health": "Check your IP address, connection, router, and website reachability.",
+            "Printer Health": "Check printers, queues, drivers, and the Windows print spooler.",
             "Cleanup": "Safe Cleanup unlocks when an active license is installed.",
             "Reports": "Open reports, logs, and technical details when you need them.",
             "License": "Activate cleanup when you are ready to recover space.",
@@ -1000,6 +1002,14 @@ class BayouFindsCleanupGUI:
             self._add_page_button("Repair Windows Networking", self.repair_windows_networking, ACCENT_DARK, ACCENT, TEXT)
             self._add_page_button("Copy Network Report", self.copy_network_report, ACCENT_DARK, ACCENT, TEXT)
             self._set_result_banner("Network Health", TEXT)
+        elif view_name == "Printer Health":
+            self.action_title_label.configure(text="Printer Health")
+            self.action_body_label.configure(
+                text="Check your default printer, print queue, offline printers, drivers, and print spooler. No printer settings are changed."
+            )
+            self.action_status_label.configure(text="Status: Ready to check", text_color=ACCENT)
+            self._add_page_button("Printer Health", self.printer_health, PRIMARY, PRIMARY_DARK, TEXT)
+            self._set_result_banner("Printer Health", TEXT)
         elif view_name == "Cleanup":
             self.action_title_label.configure(text="Run Safe Cleanup")
             self.action_body_label.configure(
@@ -1420,6 +1430,10 @@ class BayouFindsCleanupGUI:
         self._set_active_nav("Network Health")
         self.run_cleanup("Network Health", ["-NoMenu", "-Mode", "NetworkHealth"])
 
+    def printer_health(self) -> None:
+        self._set_active_nav("Printer Health")
+        self.run_cleanup("Printer Health", ["-NoMenu", "-Mode", "PrinterHealth"])
+
     def refresh_website_addresses(self) -> None:
         self._set_active_nav("Network Health")
         if not messagebox.askyesno(
@@ -1631,7 +1645,7 @@ class BayouFindsCleanupGUI:
             self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
             self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
             self._configure_text(self.top_hogs_label, "Scanning for largest contributors...", MUTED)
-        elif action_name in {"Browser Health", "Network Health"}:
+        elif action_name in {"Browser Health", "Network Health", "Printer Health"}:
             self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
             self._set_dashboard_value(self.recommendation_value_label, "Review the report when finished", TEXT)
         elif action_name in {"Refresh Website Addresses", "Get New Network Address", "Repair Windows Networking"}:
@@ -1658,7 +1672,7 @@ class BayouFindsCleanupGUI:
             else:
                 self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
                 self._set_dashboard_value(self.recommendation_value_label, "Open the report before cleanup", WARNING)
-        elif action_name in {"Browser Health", "Network Health"}:
+        elif action_name in {"Browser Health", "Network Health", "Printer Health"}:
             if exit_code == 0:
                 self._set_dashboard_value(self.last_scan_value_label, f"Completed at {now}", SUCCESS)
                 self._set_dashboard_value(self.recommendation_value_label, "Review the health report", TEXT)
@@ -1699,6 +1713,9 @@ class BayouFindsCleanupGUI:
                 return
             if report.get("RunMode") == "NetworkHealth":
                 self._append_output(self._format_network_health_breakdown(report, exit_code))
+                return
+            if report.get("RunMode") == "PrinterHealth":
+                self._append_output(self._format_printer_health_breakdown(report, exit_code))
                 return
             if report.get("RunMode") in {"FlushDns", "RenewIp", "ResetNetwork"}:
                 self._append_output(self._format_network_first_aid_breakdown(report, exit_code))
@@ -1918,20 +1935,25 @@ class BayouFindsCleanupGUI:
         for browser in browsers:
             if not isinstance(browser, dict):
                 continue
-            installed = "Installed" if browser.get("Installed") else "Not found"
-            extension_count = browser.get("ExtensionCount")
-            extension_text = "Unknown" if extension_count is None else str(extension_count)
-            lines.extend([
-                f"{browser.get('Name') or 'Browser'}: {installed}",
+            browser_lines = [
+                f"{browser.get('Name') or 'Browser'}",
+                f"- Installed: {browser.get('InstalledText') or ('Yes' if browser.get('Installed') else 'No')}",
                 f"- Version: {browser.get('Version') or 'Unknown'}",
-                f"- Default Browser: {browser.get('DefaultBrowser') or 'Unknown'}",
+                f"- Running: {browser.get('RunningText') or ('Yes' if browser.get('BrowserProcessesRunning') else 'No')}",
+                f"- Process Count: {browser.get('ProcessCount') if browser.get('ProcessCount') is not None else 0}",
                 f"- Profiles: {browser.get('ProfileCount') if browser.get('ProfileCount') is not None else 'Unknown'}",
-                f"- Cache Estimate: {browser.get('CacheSize') or 'Unknown'}",
-                f"- Extensions: {extension_text}",
-                f"- Running Now: {browser.get('ProcessStatus') or 'Unknown'}",
+                f"- Extensions: {browser.get('ExtensionCount') if browser.get('ExtensionCount') is not None else 0}",
+                f"- Cache Estimate: {browser.get('CacheSize') or '0 B'}",
+                f"- Default Browser: {browser.get('DefaultBrowser') or 'Unknown'}",
+            ]
+            detection_source = browser.get("DetectionSource")
+            if detection_source and detection_source not in {"NotFound", "Unknown"}:
+                browser_lines.append(f"- Detection Source: {detection_source}")
+            browser_lines.extend([
                 f"- Update Status: {browser.get('UpdateStatus') or 'Unknown'}",
                 "",
             ])
+            lines.extend(browser_lines)
 
         paths = report.get("Paths") or {}
         lines.extend([
@@ -1981,6 +2003,67 @@ class BayouFindsCleanupGUI:
         paths = report.get("Paths") or {}
         lines.extend([
             "",
+            f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+            "",
+        ])
+        return "\n".join(lines)
+
+    def _format_printer_health_breakdown(self, report: dict, exit_code: int) -> str:
+        summary = report.get("PrinterHealthSummary") or {}
+        printers = report.get("PrinterHealthDetails") or []
+        score = summary.get("PrinterHealthScore")
+        banner_color = SUCCESS if exit_code == 0 and isinstance(score, int) and score >= 85 else WARNING
+        if exit_code != 0:
+            banner_color = ERROR
+        self._set_result_banner("Printer Health complete", banner_color)
+
+        lines = [
+            "Printer Health",
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
+            "",
+            f"Printer Health Score: {score if score is not None else 'Unknown'}",
+            f"Default Printer: {summary.get('DefaultPrinter') or 'Unknown'}",
+            f"Installed Printers: {summary.get('InstalledPrinters') if summary.get('InstalledPrinters') is not None else 0}",
+            f"Online: {summary.get('OnlinePrinters') if summary.get('OnlinePrinters') is not None else 0}",
+            f"Offline: {summary.get('OfflinePrinters') if summary.get('OfflinePrinters') is not None else 0}",
+            f"Queued Jobs: {summary.get('TotalQueuedJobs') if summary.get('TotalQueuedJobs') is not None else 0}",
+            f"Stuck Jobs Estimate: {summary.get('StuckPrintJobsEstimate') if summary.get('StuckPrintJobsEstimate') is not None else 0}",
+            f"Oldest Queued Job: {summary.get('OldestQueuedJobAge') or 'Unknown'}",
+            f"Spooler Service: {summary.get('SpoolerServiceStatus') or 'Unknown'}",
+            f"Printer Drivers: {summary.get('PrinterDriverCount') if summary.get('PrinterDriverCount') is not None else 0}",
+            f"Microsoft Print to PDF: {summary.get('MicrosoftPrintToPDFPresent') or 'Unknown'}",
+            "",
+            "Recommendations",
+        ]
+
+        recommendations = summary.get("Recommendations") or []
+        if recommendations:
+            for recommendation in recommendations:
+                lines.append(f"- {recommendation}")
+        else:
+            lines.append("- No printer problems were detected.")
+
+        lines.extend(["", "Printer Details"])
+        if printers:
+            for printer in printers:
+                if not isinstance(printer, dict):
+                    continue
+                lines.extend([
+                    f"- {printer.get('Name') or 'Printer'}",
+                    f"  Default: {printer.get('DefaultPrinter') or 'No'}",
+                    f"  Status: {printer.get('Status') or 'Unknown'}",
+                    f"  Shared: {printer.get('Shared') or 'No'}",
+                    f"  Queue Jobs: {printer.get('QueueJobCount') if printer.get('QueueJobCount') is not None else 0}",
+                    f"  Driver: {printer.get('DriverName') or 'Unknown'}",
+                    f"  Driver Version: {printer.get('DriverVersion') or 'Unknown'}",
+                ])
+        else:
+            lines.append("- No printers detected.")
+
+        paths = report.get("Paths") or {}
+        lines.extend([
+            "",
+            "Read-only check. No queues, services, printers, or drivers were changed.",
             f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
             "",
         ])

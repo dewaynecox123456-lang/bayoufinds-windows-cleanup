@@ -8,7 +8,7 @@ Run PowerShell as Administrator.
 param(
     [switch]$DryRun,
     [switch]$SkipSFC = $true,
-    [ValidateSet("Preview", "SafeCleanup", "LicenseCheck", "BackupBookmarks", "BrowserHealth", "NetworkHealth", "FlushDns", "RenewIp", "ResetNetwork")]
+    [ValidateSet("Preview", "SafeCleanup", "LicenseCheck", "BackupBookmarks", "BrowserHealth", "NetworkHealth", "PrinterHealth", "FlushDns", "RenewIp", "ResetNetwork")]
     [string]$Mode,
     [switch]$NoMenu,
     [string]$OutputDir,
@@ -94,6 +94,8 @@ function New-CleanupReportModel {
         BrowserHealthSummary = [ordered]@{}
         BrowserHealth = @()
         NetworkHealth = [ordered]@{}
+        PrinterHealthSummary = [ordered]@{}
+        PrinterHealthDetails = @()
         NetworkFirstAid = @()
         BrowserBackups = @()
         ItemsSkipped = @()
@@ -171,6 +173,20 @@ function Set-ReportNetworkHealth {
 
     if ($script:CleanupReport -and $NetworkHealth) {
         $script:CleanupReport.NetworkHealth = $NetworkHealth
+    }
+}
+
+function Set-ReportPrinterHealth {
+    param(
+        [object]$Summary,
+        [object[]]$Details
+    )
+
+    if ($script:CleanupReport) {
+        if ($Summary) {
+            $script:CleanupReport.PrinterHealthSummary = $Summary
+        }
+        $script:CleanupReport.PrinterHealthDetails = @($Details)
     }
 }
 
@@ -402,6 +418,10 @@ function Get-ReportCleanupStatus {
         return "Network Health complete"
     }
 
+    if ($RunMode -eq "PrinterHealth") {
+        return "Printer Health complete"
+    }
+
     if (@("FlushDns", "RenewIp", "ResetNetwork") -contains $RunMode) {
         return "Network First Aid complete"
     }
@@ -428,7 +448,7 @@ function New-BrowserHealthHtml {
 
     $rows = ""
     foreach ($browser in @($script:CleanupReport.BrowserHealth)) {
-        $rows += "<tr><td>$(ConvertTo-ReportHtml $browser.Name)</td><td>$(ConvertTo-ReportHtml $browser.Status)</td><td>$(ConvertTo-ReportHtml $browser.Version)</td><td>$(ConvertTo-ReportHtml $browser.DefaultBrowser)</td><td>$(ConvertTo-ReportHtml $browser.ProfileCount)</td><td>$(ConvertTo-ReportHtml $browser.ExtensionCount)</td><td>$(ConvertTo-ReportHtml $browser.CacheSize)</td><td>$(ConvertTo-ReportHtml $browser.ProcessStatus)</td><td>$(ConvertTo-ReportHtml $browser.UpdateStatus)</td></tr>`n"
+        $rows += "<tr><td>$(ConvertTo-ReportHtml $browser.Name)</td><td>$(ConvertTo-ReportHtml $browser.InstalledText)</td><td>$(ConvertTo-ReportHtml $browser.Version)</td><td>$(ConvertTo-ReportHtml $browser.RunningText)</td><td>$(ConvertTo-ReportHtml $browser.ProcessCount)</td><td>$(ConvertTo-ReportHtml $browser.ProfileCount)</td><td>$(ConvertTo-ReportHtml $browser.ExtensionCount)</td><td>$(ConvertTo-ReportHtml $browser.CacheSize)</td><td>$(ConvertTo-ReportHtml $browser.DefaultBrowser)</td><td>$(ConvertTo-ReportHtml $browser.DetectionSource)</td><td>$(ConvertTo-ReportHtml $browser.UpdateStatus)</td></tr>`n"
     }
 
     return @"
@@ -444,9 +464,60 @@ function New-BrowserHealthHtml {
 </table>
 <h3>Browser Details</h3>
 <table>
-<tr><td><strong>Browser</strong></td><td><strong>Status</strong></td><td><strong>Version</strong></td><td><strong>Default Browser</strong></td><td><strong>Profiles</strong></td><td><strong>Extensions</strong></td><td><strong>Cache Estimate</strong></td><td><strong>Running Now</strong></td><td><strong>Update Status</strong></td></tr>
+<tr><td><strong>Browser</strong></td><td><strong>Installed</strong></td><td><strong>Version</strong></td><td><strong>Running</strong></td><td><strong>Process Count</strong></td><td><strong>Profiles</strong></td><td><strong>Extensions</strong></td><td><strong>Cache</strong></td><td><strong>Default</strong></td><td><strong>Detection Source</strong></td><td><strong>Update Status</strong></td></tr>
 $rows
 </table>
+"@
+}
+
+function New-PrinterHealthHtml {
+    if (!$script:CleanupReport -or !$script:CleanupReport.PrinterHealthSummary -or $script:CleanupReport.PrinterHealthSummary.Count -eq 0) {
+        return "<h2>Printer Health Report</h2><p>No Printer Health scan results were recorded for this run.</p>"
+    }
+
+    $summary = $script:CleanupReport.PrinterHealthSummary
+    $recommendationRows = ""
+    foreach ($recommendation in @($summary.Recommendations)) {
+        $recommendationRows += "<li>$(ConvertTo-ReportHtml $recommendation)</li>`n"
+    }
+    if (!$recommendationRows) {
+        $recommendationRows = "<li>No printer problems were detected.</li>"
+    }
+
+    $printerRows = ""
+    foreach ($printer in @($script:CleanupReport.PrinterHealthDetails)) {
+        $printerRows += "<tr><td>$(ConvertTo-ReportHtml $printer.Name)</td><td>$(ConvertTo-ReportHtml $printer.DefaultPrinter)</td><td>$(ConvertTo-ReportHtml $printer.Status)</td><td>$(ConvertTo-ReportHtml $printer.Shared)</td><td>$(ConvertTo-ReportHtml $printer.QueueJobCount)</td><td>$(ConvertTo-ReportHtml $printer.DriverName)</td><td>$(ConvertTo-ReportHtml $printer.DriverVersion)</td></tr>`n"
+    }
+    if (!$printerRows) {
+        $printerRows = "<tr><td>No printers detected</td><td>No</td><td>Unknown</td><td>No</td><td>0</td><td>Unknown</td><td>Unknown</td></tr>"
+    }
+
+    return @"
+<h2>Printer Health Report</h2>
+<p>Printer Health is read-only. It checks printer status, queues, drivers, and the Windows print spooler without clearing queues, restarting services, removing printers, or removing drivers.</p>
+<h3>Printer Health Summary</h3>
+<table>
+<tr><td><strong>Default Printer</strong></td><td>$(ConvertTo-ReportHtml $summary.DefaultPrinter)</td></tr>
+<tr><td><strong>Installed Printers</strong></td><td>$(ConvertTo-ReportHtml $summary.InstalledPrinters)</td></tr>
+<tr><td><strong>Online</strong></td><td>$(ConvertTo-ReportHtml $summary.OnlinePrinters)</td></tr>
+<tr><td><strong>Offline</strong></td><td>$(ConvertTo-ReportHtml $summary.OfflinePrinters)</td></tr>
+<tr><td><strong>Queued Jobs</strong></td><td>$(ConvertTo-ReportHtml $summary.TotalQueuedJobs)</td></tr>
+<tr><td><strong>Stuck Jobs Estimate</strong></td><td>$(ConvertTo-ReportHtml $summary.StuckPrintJobsEstimate)</td></tr>
+<tr><td><strong>Oldest Queued Job</strong></td><td>$(ConvertTo-ReportHtml $summary.OldestQueuedJobAge)</td></tr>
+<tr><td><strong>Spooler Service</strong></td><td>$(ConvertTo-ReportHtml $summary.SpoolerServiceStatus)</td></tr>
+<tr><td><strong>Printer Drivers</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterDriverCount)</td></tr>
+<tr><td><strong>Microsoft Print to PDF</strong></td><td>$(ConvertTo-ReportHtml $summary.MicrosoftPrintToPDFPresent)</td></tr>
+<tr><td><strong>Printer Health Score</strong></td><td>$(ConvertTo-ReportHtml $summary.PrinterHealthScore)</td></tr>
+</table>
+<h3>Per-Printer Details</h3>
+<table>
+<tr><td><strong>Printer</strong></td><td><strong>Default</strong></td><td><strong>Status</strong></td><td><strong>Shared</strong></td><td><strong>Queue Jobs</strong></td><td><strong>Driver</strong></td><td><strong>Driver Version</strong></td></tr>
+$printerRows
+</table>
+<h3>Recommendations</h3>
+<ul>
+$recommendationRows
+</ul>
 "@
 }
 
@@ -545,6 +616,19 @@ function Write-HtmlReport {
 <div class="summary-item"><div class="summary-label">Cleanup Metrics</div><div class="summary-value">Not applicable</div></div>
 "@
     }
+    elseif ($reportRunMode -eq "PrinterHealth") {
+        $printerSummary = if ($script:CleanupReport) { $script:CleanupReport.PrinterHealthSummary } else { $null }
+        $printerScore = if ($printerSummary -and $null -ne $printerSummary.PrinterHealthScore) { $printerSummary.PrinterHealthScore } else { "Unknown" }
+        $installedPrinters = if ($printerSummary -and $null -ne $printerSummary.InstalledPrinters) { $printerSummary.InstalledPrinters } else { 0 }
+        $offlinePrinters = if ($printerSummary -and $null -ne $printerSummary.OfflinePrinters) { $printerSummary.OfflinePrinters } else { 0 }
+        $queuedJobs = if ($printerSummary -and $null -ne $printerSummary.TotalQueuedJobs) { $printerSummary.TotalQueuedJobs } else { 0 }
+        $summaryItemsHtml = @"
+<div class="summary-item"><div class="summary-label">Printer Health Score</div><div class="summary-value">$printerScore</div></div>
+<div class="summary-item"><div class="summary-label">Installed Printers</div><div class="summary-value">$installedPrinters</div></div>
+<div class="summary-item"><div class="summary-label">Offline Printers</div><div class="summary-value">$offlinePrinters</div></div>
+<div class="summary-item"><div class="summary-label">Queued Jobs</div><div class="summary-value">$queuedJobs</div></div>
+"@
+    }
     else {
         $summaryItemsHtml = @"
 <div class="summary-item"><div class="summary-label">Potential Recovery</div><div class="summary-value">$potentialRecovery</div></div>
@@ -554,6 +638,7 @@ function Write-HtmlReport {
 "@
     }
     $browserHealthHtml = New-BrowserHealthHtml
+    $printerHealthHtml = New-PrinterHealthHtml
     $networkHealthHtml = New-NetworkHealthHtml
     $networkFirstAidHtml = New-NetworkFirstAidHtml
 
@@ -593,9 +678,9 @@ $summaryItemsHtml
 <tr><td><strong>User</strong></td><td>$userName</td></tr>
 <tr><td><strong>Started</strong></td><td>$($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Ended</strong></td><td>$($endTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
-<tr><td><strong>Estimated Cleanup Targets</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { $EstimatedCleanupTargets })</td></tr>
-<tr><td><strong>Potential Recovery</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { "$recoverableBytes bytes" })</td></tr>
-<tr><td><strong>Recovered This Run</strong></td><td>$(if ($reportRunMode -eq "BrowserHealth") { "Not applicable" } else { "$recoveredBytes bytes" })</td></tr>
+<tr><td><strong>Estimated Cleanup Targets</strong></td><td>$(if (@("BrowserHealth", "PrinterHealth") -contains $reportRunMode) { "Not applicable" } else { $EstimatedCleanupTargets })</td></tr>
+<tr><td><strong>Potential Recovery</strong></td><td>$(if (@("BrowserHealth", "PrinterHealth") -contains $reportRunMode) { "Not applicable" } else { "$recoverableBytes bytes" })</td></tr>
+<tr><td><strong>Recovered This Run</strong></td><td>$(if (@("BrowserHealth", "PrinterHealth") -contains $reportRunMode) { "Not applicable" } else { "$recoveredBytes bytes" })</td></tr>
 <tr><td><strong>Total Recovered</strong></td><td>$totalRecoveredBytes bytes</td></tr>
 <tr><td><strong>PC Health Score</strong></td><td>$pcHealthScore / 100</td></tr>
 <tr><td><strong>Log File</strong></td><td>$LogFile</td></tr>
@@ -609,6 +694,8 @@ $summaryItemsHtml
 <p><strong>$LogDir</strong></p>
 
 $browserHealthHtml
+
+$printerHealthHtml
 
 $networkHealthHtml
 
@@ -897,12 +984,13 @@ function Show-MainMenu {
         Write-Host "2. Preview Cleanup"
         Write-Host "3. Browser Health"
         Write-Host "4. Network Health"
-        Write-Host "5. Backup Browser Bookmarks"
-        Write-Host "6. Refresh Website Addresses"
-        Write-Host "7. Get New Network Address"
-        Write-Host "8. Repair Windows Networking"
-        Write-Host "9. View Last Report"
-        Write-Host "10. Exit"
+        Write-Host "5. Printer Health"
+        Write-Host "6. Backup Browser Bookmarks"
+        Write-Host "7. Refresh Website Addresses"
+        Write-Host "8. Get New Network Address"
+        Write-Host "9. Repair Windows Networking"
+        Write-Host "10. View Last Report"
+        Write-Host "11. Exit"
         Write-Host ""
 
         $choice = Read-Host "Choose an option"
@@ -920,28 +1008,31 @@ function Show-MainMenu {
                 return "NetworkHealth"
             }
             "5" {
-                return "BackupBookmarks"
+                return "PrinterHealth"
             }
             "6" {
+                return "BackupBookmarks"
+            }
+            "7" {
                 Write-Host "Refresh Website Addresses clears Windows saved website lookup results. It can help when websites do not open after a router, modem, or DNS change." -ForegroundColor Yellow
                 $confirm = Read-Host "Type YES to run Refresh Website Addresses"
                 if ($confirm -eq "YES") { return "FlushDns" }
             }
-            "7" {
+            "8" {
                 Write-Host "Get New Network Address asks your router for a network address again. Your router may assign the same address again, which is normal." -ForegroundColor Yellow
                 $confirm = Read-Host "Type YES to run Get New Network Address"
                 if ($confirm -eq "YES") { return "RenewIp" }
             }
-            "8" {
+            "9" {
                 Write-Host "Repair Windows Networking resets Winsock and the Windows IP network stack. A restart may be needed after this repair." -ForegroundColor Yellow
                 $confirm = Read-Host "Type YES to run Repair Windows Networking"
                 if ($confirm -eq "YES") { return "ResetNetwork" }
             }
-            "9" {
+            "10" {
                 Open-LastReport
                 Read-Host "Press Enter to return to the menu"
             }
-            "10" {
+            "11" {
                 return "Exit"
             }
             default {
@@ -1066,6 +1157,107 @@ function Get-FirstExistingPath {
     return $null
 }
 
+function Join-OptionalPath {
+    param(
+        [string]$BasePath,
+        [string]$ChildPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BasePath)) {
+        return $null
+    }
+
+    return Join-Path -Path $BasePath -ChildPath $ChildPath
+}
+
+function Get-BrowserRegistryInstall {
+    param([string]$Browser)
+
+    if (!(Test-WindowsPlatform)) {
+        return $null
+    }
+
+    $uninstallPaths = @(
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+
+    foreach ($uninstallPath in $uninstallPaths) {
+        $matches = @(Get-ItemProperty -Path $uninstallPath -ErrorAction SilentlyContinue | Where-Object {
+            $displayName = [string]$_.DisplayName
+            if ([string]::IsNullOrWhiteSpace($displayName)) {
+                return $false
+            }
+
+            if ($Browser -eq "Google Chrome") {
+                return $displayName -like "Google Chrome*"
+            }
+            if ($Browser -eq "Microsoft Edge") {
+                return $displayName -match "^Microsoft Edge( Beta| Dev| Canary)?$"
+            }
+            if ($Browser -eq "Mozilla Firefox") {
+                return $displayName -like "Mozilla Firefox*"
+            }
+
+            return $false
+        })
+
+        if ($matches.Count -gt 0) {
+            $match = $matches | Sort-Object DisplayName | Select-Object -First 1
+            return [ordered]@{
+                DisplayName = [string]$match.DisplayName
+                DisplayVersion = [string]$match.DisplayVersion
+                InstallLocation = [string]$match.InstallLocation
+                Publisher = [string]$match.Publisher
+            }
+        }
+    }
+
+    return $null
+}
+
+function Resolve-BrowserInstall {
+    param(
+        [string]$Name,
+        [object]$RegistryInfo,
+        [object[]]$ExecutableCandidates,
+        [bool]$ProfileFound
+    )
+
+    $exePath = Get-FirstExistingPath -Paths $ExecutableCandidates
+    $installLocation = if ($RegistryInfo -and $RegistryInfo.InstallLocation) { [string]$RegistryInfo.InstallLocation } else { $null }
+    if (!$installLocation -and $exePath) {
+        $installLocation = Split-Path -Path $exePath -Parent
+    }
+
+    $version = if ($RegistryInfo -and $RegistryInfo.DisplayVersion) { [string]$RegistryInfo.DisplayVersion } else { $null }
+    if (!$version -and $exePath) {
+        $version = Get-FileVersionValue -Path $exePath
+    }
+
+    $detectionSource = "NotFound"
+    if ($RegistryInfo) {
+        $detectionSource = "Registry"
+    }
+    elseif ($exePath) {
+        $detectionSource = "ExecutablePath"
+    }
+    elseif ($ProfileFound) {
+        $detectionSource = "ProfileOnly"
+    }
+
+    return [ordered]@{
+        Name = $Name
+        Installed = $detectionSource -ne "NotFound"
+        Version = $version
+        ExecutablePath = $exePath
+        InstallLocation = $installLocation
+        Publisher = if ($RegistryInfo -and $RegistryInfo.Publisher) { [string]$RegistryInfo.Publisher } else { $null }
+        DetectionSource = $detectionSource
+    }
+}
+
 function Get-BrowserProcessCount {
     param([string[]]$ProcessNames)
 
@@ -1167,7 +1359,7 @@ function Get-FirefoxCachePaths {
 function New-BrowserHealthResult {
     param(
         [string]$Name,
-        [string]$ExePath,
+        [string]$ExecutablePath,
         [bool]$Installed,
         [string]$Version,
         [string]$DefaultBrowserStatus,
@@ -1175,24 +1367,34 @@ function New-BrowserHealthResult {
         [nullable[int64]]$CacheBytes,
         [nullable[int]]$ExtensionCount,
         [int]$ProcessCount,
-        [string]$UpdateStatus
+        [string]$UpdateStatus,
+        [string]$DetectionSource,
+        [string]$InstallLocation,
+        [string]$Publisher
     )
 
     return [ordered]@{
         Name = $Name
         Installed = $Installed
+        InstalledText = if ($Installed) { "Yes" } else { "No" }
         Status = if ($Installed) { "Installed" } else { "Not found" }
-        Version = Format-ReportValue -Value $Version
+        Version = if ($Installed) { Format-ReportValue -Value $Version } else { "Not found" }
         DefaultBrowser = Format-ReportValue -Value $DefaultBrowserStatus
-        ProfileCount = $ProfileCount
+        ProfileCount = if ($null -ne $ProfileCount) { [int]$ProfileCount } else { 0 }
         CacheBytes = $CacheBytes
-        CacheSize = if ($null -ne $CacheBytes) { Format-ReportBytes -Bytes $CacheBytes } else { "Unknown" }
-        ExtensionCount = $ExtensionCount
+        CacheSize = if ($null -ne $CacheBytes) { Format-ReportBytes -Bytes $CacheBytes } else { "0 B" }
+        ExtensionCount = if ($null -ne $ExtensionCount) { [int]$ExtensionCount } else { 0 }
         ProcessCount = $ProcessCount
         BrowserProcessesRunning = $ProcessCount -gt 0
+        Running = $ProcessCount -gt 0
+        RunningText = if ($ProcessCount -gt 0) { "Yes" } else { "No" }
         ProcessStatus = if ($ProcessCount -gt 0) { "Running ($ProcessCount)" } else { "Not running" }
         UpdateStatus = if ($UpdateStatus) { $UpdateStatus } else { "Unknown" }
-        ExePath = $ExePath
+        DetectionSource = if ($DetectionSource) { $DetectionSource } else { "Unknown" }
+        ExecutablePath = $ExecutablePath
+        ExePath = $ExecutablePath
+        InstallLocation = Format-ReportValue -Value $InstallLocation
+        Publisher = Format-ReportValue -Value $Publisher
     }
 }
 
@@ -1202,43 +1404,46 @@ function Get-BrowserHealth {
     $defaultProgId = Get-DefaultBrowserProgId
     $results = @()
 
-    $chromeExe = Get-FirstExistingPath -Paths @(
-        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Google\Chrome\Application\chrome.exe"),
-        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
-        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\Application\chrome.exe")
-    )
     $chromeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\User Data" } else { $null }
     $chromeProfiles = Get-ChromiumProfiles -UserDataPath $chromeUserData
-    $chromeInstalled = [bool]$chromeExe -or (Test-Path -Path $chromeUserData -PathType Container)
+    $chromeRegistry = Get-BrowserRegistryInstall -Browser "Google Chrome"
+    $chromeInstall = Resolve-BrowserInstall -Name "Google Chrome" -RegistryInfo $chromeRegistry -ExecutableCandidates @(
+        (Join-OptionalPath -BasePath $chromeRegistry.InstallLocation -ChildPath "chrome.exe"),
+        (Join-OptionalPath -BasePath $chromeRegistry.InstallLocation -ChildPath "Application\chrome.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles} -ChildPath "Google\Chrome\Application\chrome.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
+        (Join-OptionalPath -BasePath $env:LOCALAPPDATA -ChildPath "Google\Chrome\Application\chrome.exe")
+    ) -ProfileFound ($chromeProfiles.Count -gt 0)
     $chromeCacheBytes = if ($chromeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $chromeProfiles) } else { $null }
     $chromeExtensionCount = if ($chromeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $chromeProfiles } else { $null }
     $chromeProcessCount = Get-BrowserProcessCount -ProcessNames @("chrome")
-    $results += New-BrowserHealthResult -Name "Google Chrome" -ExePath $chromeExe -Installed $chromeInstalled -Version (Get-FileVersionValue -Path $chromeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Google Chrome" -ProgId $defaultProgId) -ProfileCount $chromeProfiles.Count -CacheBytes $chromeCacheBytes -ExtensionCount $chromeExtensionCount -ProcessCount $chromeProcessCount -UpdateStatus "Unknown"
+    $results += New-BrowserHealthResult -Name "Google Chrome" -ExecutablePath $chromeInstall.ExecutablePath -Installed $chromeInstall.Installed -Version $chromeInstall.Version -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Google Chrome" -ProgId $defaultProgId) -ProfileCount $chromeProfiles.Count -CacheBytes $chromeCacheBytes -ExtensionCount $chromeExtensionCount -ProcessCount $chromeProcessCount -UpdateStatus "Unknown" -DetectionSource $chromeInstall.DetectionSource -InstallLocation $chromeInstall.InstallLocation -Publisher $chromeInstall.Publisher
 
-    $edgeExe = Get-FirstExistingPath -Paths @(
-        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\Application\msedge.exe")
-    )
     $edgeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data" } else { $null }
     $edgeProfiles = Get-ChromiumProfiles -UserDataPath $edgeUserData
-    $edgeInstalled = [bool]$edgeExe -or (Test-Path -Path $edgeUserData -PathType Container)
+    $edgeRegistry = Get-BrowserRegistryInstall -Browser "Microsoft Edge"
+    $edgeInstall = Resolve-BrowserInstall -Name "Microsoft Edge" -RegistryInfo $edgeRegistry -ExecutableCandidates @(
+        (Join-OptionalPath -BasePath $edgeRegistry.InstallLocation -ChildPath "msedge.exe"),
+        (Join-OptionalPath -BasePath $edgeRegistry.InstallLocation -ChildPath "Application\msedge.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles} -ChildPath "Microsoft\Edge\Application\msedge.exe")
+    ) -ProfileFound ($edgeProfiles.Count -gt 0)
     $edgeCacheBytes = if ($edgeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $edgeProfiles) } else { $null }
     $edgeExtensionCount = if ($edgeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $edgeProfiles } else { $null }
     $edgeProcessCount = Get-BrowserProcessCount -ProcessNames @("msedge")
-    $results += New-BrowserHealthResult -Name "Microsoft Edge" -ExePath $edgeExe -Installed $edgeInstalled -Version (Get-FileVersionValue -Path $edgeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Microsoft Edge" -ProgId $defaultProgId) -ProfileCount $edgeProfiles.Count -CacheBytes $edgeCacheBytes -ExtensionCount $edgeExtensionCount -ProcessCount $edgeProcessCount -UpdateStatus "Unknown"
+    $results += New-BrowserHealthResult -Name "Microsoft Edge" -ExecutablePath $edgeInstall.ExecutablePath -Installed $edgeInstall.Installed -Version $edgeInstall.Version -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Microsoft Edge" -ProgId $defaultProgId) -ProfileCount $edgeProfiles.Count -CacheBytes $edgeCacheBytes -ExtensionCount $edgeExtensionCount -ProcessCount $edgeProcessCount -UpdateStatus "Unknown" -DetectionSource $edgeInstall.DetectionSource -InstallLocation $edgeInstall.InstallLocation -Publisher $edgeInstall.Publisher
 
-    $firefoxExe = Get-FirstExistingPath -Paths @(
-        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Mozilla Firefox\firefox.exe"),
-        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Mozilla Firefox\firefox.exe"),
-        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Mozilla Firefox\firefox.exe")
-    )
     $firefoxProfiles = Get-FirefoxProfiles
-    $firefoxInstalled = [bool]$firefoxExe -or $firefoxProfiles.Count -gt 0
+    $firefoxRegistry = Get-BrowserRegistryInstall -Browser "Mozilla Firefox"
+    $firefoxInstall = Resolve-BrowserInstall -Name "Mozilla Firefox" -RegistryInfo $firefoxRegistry -ExecutableCandidates @(
+        (Join-OptionalPath -BasePath $firefoxRegistry.InstallLocation -ChildPath "firefox.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles} -ChildPath "Mozilla Firefox\firefox.exe"),
+        (Join-OptionalPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Mozilla Firefox\firefox.exe")
+    ) -ProfileFound ($firefoxProfiles.Count -gt 0)
     $firefoxCacheBytes = if ($firefoxProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-FirefoxCachePaths -Profiles $firefoxProfiles) } else { $null }
     $firefoxExtensionCount = if ($firefoxProfiles.Count -gt 0) { Get-FirefoxExtensionCount -Profiles $firefoxProfiles } else { $null }
     $firefoxProcessCount = Get-BrowserProcessCount -ProcessNames @("firefox")
-    $results += New-BrowserHealthResult -Name "Mozilla Firefox" -ExePath $firefoxExe -Installed $firefoxInstalled -Version (Get-FileVersionValue -Path $firefoxExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Mozilla Firefox" -ProgId $defaultProgId) -ProfileCount $firefoxProfiles.Count -CacheBytes $firefoxCacheBytes -ExtensionCount $firefoxExtensionCount -ProcessCount $firefoxProcessCount -UpdateStatus "Unknown"
+    $results += New-BrowserHealthResult -Name "Mozilla Firefox" -ExecutablePath $firefoxInstall.ExecutablePath -Installed $firefoxInstall.Installed -Version $firefoxInstall.Version -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Mozilla Firefox" -ProgId $defaultProgId) -ProfileCount $firefoxProfiles.Count -CacheBytes $firefoxCacheBytes -ExtensionCount $firefoxExtensionCount -ProcessCount $firefoxProcessCount -UpdateStatus "Unknown" -DetectionSource $firefoxInstall.DetectionSource -InstallLocation $firefoxInstall.InstallLocation -Publisher $firefoxInstall.Publisher
 
     $totalCacheBytes = 0L
     $totalProfiles = 0
@@ -1279,6 +1484,214 @@ function Get-BrowserHealth {
     Add-ReportNote -Message "Browser Health reports browser install, version, default browser, profile count, extension count, cache estimate, and process count only. Passwords, cookies, browsing history, autofill, and private browser data are not collected."
     Write-Log "Browser Health scan complete."
     return $results
+}
+
+function ConvertTo-YesNo {
+    param([bool]$Value)
+
+    if ($Value) {
+        return "Yes"
+    }
+
+    return "No"
+}
+
+function Format-JobAge {
+    param([nullable[timespan]]$Age)
+
+    if ($null -eq $Age) {
+        return "Unknown"
+    }
+
+    if ($Age.Value.TotalDays -ge 1) {
+        return "{0:N0} days" -f [Math]::Floor($Age.Value.TotalDays)
+    }
+    if ($Age.Value.TotalHours -ge 1) {
+        return "{0:N0} hours" -f [Math]::Floor($Age.Value.TotalHours)
+    }
+    if ($Age.Value.TotalMinutes -ge 1) {
+        return "{0:N0} minutes" -f [Math]::Floor($Age.Value.TotalMinutes)
+    }
+
+    return "Less than 1 minute"
+}
+
+function Get-PrinterDriverVersion {
+    param([object]$Driver)
+
+    if (!$Driver) {
+        return "Unknown"
+    }
+
+    foreach ($propertyName in @("DriverVersion", "Version", "MajorVersion")) {
+        if ($Driver.PSObject.Properties.Name -contains $propertyName -and $null -ne $Driver.$propertyName) {
+            return [string]$Driver.$propertyName
+        }
+    }
+
+    return "Unknown"
+}
+
+function Get-PrinterRecommendations {
+    param([object]$Summary)
+
+    $recommendations = @()
+
+    if ($Summary.SpoolerServiceStatus -ne "Running") {
+        $recommendations += "The Windows print spooler is not running."
+    }
+    if ([int]$Summary.OfflinePrinters -gt 0) {
+        $recommendations += "$($Summary.OfflinePrinters) printer(s) appear offline."
+    }
+    if ([int]$Summary.TotalQueuedJobs -gt 0) {
+        $recommendations += "$($Summary.TotalQueuedJobs) print job(s) are waiting in queue."
+    }
+    if ([int]$Summary.StuckPrintJobsEstimate -gt 0) {
+        $recommendations += "$($Summary.StuckPrintJobsEstimate) print job(s) may be stuck."
+    }
+    if ($Summary.DefaultPrinter -eq "Unknown" -or $Summary.DefaultPrinter -eq "None detected") {
+        $recommendations += "No default printer was detected."
+    }
+
+    if ($recommendations.Count -eq 0) {
+        $recommendations += "No printer problems were detected."
+    }
+
+    return @($recommendations)
+}
+
+function Get-PrinterHealthScore {
+    param([object]$Summary)
+
+    $score = 100
+    if ($Summary.SpoolerServiceStatus -ne "Running") {
+        $score -= 35
+    }
+    $score -= [Math]::Min(25, ([int]$Summary.OfflinePrinters * 10))
+    $score -= [Math]::Min(20, ([int]$Summary.StuckPrintJobsEstimate * 8))
+    $score -= [Math]::Min(10, ([int]$Summary.TotalQueuedJobs * 2))
+    if ($Summary.DefaultPrinter -eq "Unknown" -or $Summary.DefaultPrinter -eq "None detected") {
+        $score -= 10
+    }
+
+    return [Math]::Max(0, [Math]::Min(100, $score))
+}
+
+function Get-PrinterHealth {
+    Write-Log "Printer Health scan started. This check is read-only and does not clear queues, restart services, remove printers, or remove drivers."
+
+    if (!(Test-WindowsPlatform)) {
+        $summary = [ordered]@{
+            DefaultPrinter = "Unknown"
+            InstalledPrinters = 0
+            OnlinePrinters = 0
+            OfflinePrinters = 0
+            SpoolerServiceStatus = "Unavailable"
+            TotalQueuedJobs = 0
+            StuckPrintJobsEstimate = 0
+            OldestQueuedJobAge = "Unknown"
+            OldestQueuedJobAgeMinutes = $null
+            PrinterDriverCount = 0
+            MicrosoftPrintToPDFPresent = "Unknown"
+            PrinterHealthScore = 100
+            Recommendations = @("Printer Health requires Windows printer APIs. No printer checks were run in this environment.")
+            SafetyNote = "Printer Health is read-only. No queues, services, printers, or drivers are changed."
+        }
+        Set-ReportPrinterHealth -Summary $summary -Details @()
+        Add-ReportNote -Message "Printer Health skipped Windows printer APIs because this validation run is not on Windows."
+        Write-Log "Printer Health scan complete."
+        return $summary
+    }
+
+    $printers = @(Get-Printer -ErrorAction SilentlyContinue)
+    $cimPrinters = @(Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue)
+    $drivers = @(Get-PrinterDriver -ErrorAction SilentlyContinue)
+    $spooler = Get-Service -Name Spooler -ErrorAction SilentlyContinue
+    $defaultPrinter = $cimPrinters | Where-Object { $_.Default } | Select-Object -First 1
+    $defaultPrinterName = if ($defaultPrinter) { [string]$defaultPrinter.Name } else { "None detected" }
+
+    $driverLookup = @{}
+    foreach ($driver in @($drivers)) {
+        if ($driver.Name -and !$driverLookup.ContainsKey($driver.Name)) {
+            $driverLookup[$driver.Name] = $driver
+        }
+    }
+
+    $details = @()
+    $totalQueuedJobs = 0
+    $stuckJobs = 0
+    $oldestAge = $null
+    $now = Get-Date
+
+    foreach ($printer in @($printers)) {
+        $printerName = [string]$printer.Name
+        $queueJobs = @(Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue)
+        $queueCount = $queueJobs.Count
+        $totalQueuedJobs += $queueCount
+
+        foreach ($job in @($queueJobs)) {
+            $submitted = $null
+            if ($job.PSObject.Properties.Name -contains "SubmittedTime" -and $job.SubmittedTime) {
+                $submitted = [datetime]$job.SubmittedTime
+            }
+            elseif ($job.PSObject.Properties.Name -contains "TimeSubmitted" -and $job.TimeSubmitted) {
+                $submitted = [datetime]$job.TimeSubmitted
+            }
+
+            if ($submitted) {
+                $age = $now - $submitted
+                if ($null -eq $oldestAge -or $age -gt $oldestAge) {
+                    $oldestAge = $age
+                }
+                if ($age.TotalMinutes -ge 15) {
+                    $stuckJobs++
+                }
+            }
+        }
+
+        $isOffline = [bool]$printer.WorkOffline -or ([string]$printer.PrinterStatus -match "Offline|Error")
+        $driverName = Format-ReportValue -Value $printer.DriverName
+        $driver = if ($driverLookup.ContainsKey($printer.DriverName)) { $driverLookup[$printer.DriverName] } else { $null }
+
+        $details += [ordered]@{
+            Name = $printerName
+            DefaultPrinter = ConvertTo-YesNo -Value ($printerName -eq $defaultPrinterName)
+            Online = -not $isOffline
+            Status = if ($isOffline) { "Offline" } else { "Online" }
+            Shared = ConvertTo-YesNo -Value ([bool]$printer.Shared)
+            QueueJobCount = $queueCount
+            DriverName = $driverName
+            DriverVersion = Get-PrinterDriverVersion -Driver $driver
+        }
+    }
+
+    $offlineCount = @($details | Where-Object { $_.Status -eq "Offline" }).Count
+    $onlineCount = @($details | Where-Object { $_.Status -eq "Online" }).Count
+    $microsoftPrintToPdf = @($printers | Where-Object { $_.Name -eq "Microsoft Print to PDF" }).Count -gt 0
+
+    $summary = [ordered]@{
+        DefaultPrinter = $defaultPrinterName
+        InstalledPrinters = $printers.Count
+        OnlinePrinters = $onlineCount
+        OfflinePrinters = $offlineCount
+        SpoolerServiceStatus = if ($spooler) { [string]$spooler.Status } else { "Unknown" }
+        TotalQueuedJobs = $totalQueuedJobs
+        StuckPrintJobsEstimate = $stuckJobs
+        OldestQueuedJobAge = Format-JobAge -Age $oldestAge
+        OldestQueuedJobAgeMinutes = if ($null -ne $oldestAge) { [Math]::Round($oldestAge.TotalMinutes, 1) } else { $null }
+        PrinterDriverCount = $drivers.Count
+        MicrosoftPrintToPDFPresent = ConvertTo-YesNo -Value $microsoftPrintToPdf
+        PrinterHealthScore = 100
+        Recommendations = @()
+        SafetyNote = "Printer Health is read-only. No queues, services, printers, or drivers are changed."
+    }
+    $summary.PrinterHealthScore = Get-PrinterHealthScore -Summary $summary
+    $summary.Recommendations = Get-PrinterRecommendations -Summary $summary
+
+    Set-ReportPrinterHealth -Summary $summary -Details $details
+    Add-ReportNote -Message "Printer Health is read-only. It does not clear queues, restart the spooler, remove printers, or remove drivers."
+    Write-Log "Printer Health scan complete."
+    return $summary
 }
 
 function Get-NetworkAdapterKind {
@@ -2317,6 +2730,12 @@ function Invoke-CleanupRun {
         return
     }
 
+    if ($RunMode -eq "PrinterHealth") {
+        Get-PrinterHealth | Out-Null
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
     $isWindowsPlatform = Test-WindowsPlatform
     if (!$isWindowsPlatform) {
         Write-Log "INFO: This tool is intended for Windows. Validation mode passed."
@@ -2404,6 +2823,9 @@ function Start-BayouFindsCleanupTool {
             }
             "NetworkHealth" {
                 $runMode = "NetworkHealth"
+            }
+            "PrinterHealth" {
+                $runMode = "PrinterHealth"
             }
             "FlushDns" {
                 $runMode = "FlushDns"
