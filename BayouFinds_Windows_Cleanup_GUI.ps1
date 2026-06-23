@@ -60,6 +60,94 @@ function Set-BfControlsEnabled {
     }
 }
 
+function Test-GuiElevated {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return [bool]$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Restart-BfAsAdministrator {
+    try {
+        Start-Process -FilePath "powershell.exe" -ArgumentList @(
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-STA",
+            "-File",
+            "`"$PSCommandPath`""
+        ) -Verb RunAs | Out-Null
+        if ($script:OutputBox) {
+            Add-BfLogLine -Message "Restarting as Administrator..."
+        }
+        [System.Windows.Forms.Application]::Exit()
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Could not restart as Administrator.`n`n$($_.Exception.Message)",
+            "BayouFinds Windows Cleanup Tool",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    }
+}
+
+function Show-AdministratorRequiredDialog {
+    $dialog = New-Object System.Windows.Forms.Form
+    $dialog.Text = "Administrator Required"
+    $dialog.StartPosition = "CenterParent"
+    $dialog.Size = New-Object System.Drawing.Size(430, 190)
+    $dialog.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $dialog.MaximizeBox = $false
+    $dialog.MinimizeBox = $false
+    $dialog.BackColor = [System.Drawing.Color]::White
+
+    $title = New-Object System.Windows.Forms.Label
+    $title.Text = "Administrator Required"
+    $title.Location = New-Object System.Drawing.Point(18, 18)
+    $title.Size = New-Object System.Drawing.Size(360, 28)
+    $title.Font = New-BfFont -Size 12 -Style ([System.Drawing.FontStyle]::Bold)
+
+    $message = New-Object System.Windows.Forms.Label
+    $message.Text = "This action requires Administrator access."
+    $message.Location = New-Object System.Drawing.Point(18, 54)
+    $message.Size = New-Object System.Drawing.Size(370, 36)
+    $message.Font = New-BfFont -Size 10
+
+    $restartButton = New-Object System.Windows.Forms.Button
+    $restartButton.Text = "Restart as Administrator"
+    $restartButton.Location = New-Object System.Drawing.Point(18, 106)
+    $restartButton.Size = New-Object System.Drawing.Size(190, 34)
+    $restartButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+
+    $cancelButton = New-Object System.Windows.Forms.Button
+    $cancelButton.Text = "Cancel"
+    $cancelButton.Location = New-Object System.Drawing.Point(286, 106)
+    $cancelButton.Size = New-Object System.Drawing.Size(100, 34)
+    $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+
+    $dialog.AcceptButton = $restartButton
+    $dialog.CancelButton = $cancelButton
+    $dialog.Controls.AddRange(@($title, $message, $restartButton, $cancelButton))
+
+    $choice = $dialog.ShowDialog()
+    $dialog.Dispose()
+
+    if ($choice -eq [System.Windows.Forms.DialogResult]::OK) {
+        Restart-BfAsAdministrator
+    }
+}
+
+function Test-RunRequiresAdmin {
+    param([string]$Mode)
+
+    return @("ResetNetwork") -contains $Mode
+}
+
 function Open-ReportsFolder {
     if (!(Test-Path -Path $script:ReportsPath)) {
         New-Item -ItemType Directory -Force -Path $script:ReportsPath | Out-Null
@@ -98,6 +186,72 @@ function Open-LastReport {
     }
 
     Start-Process -FilePath $reportPath
+}
+
+function Get-LastJsonReportPath {
+    if (!(Test-Path -Path $script:ReportsPath)) {
+        return $null
+    }
+
+    $report = Get-ChildItem -Path $script:ReportsPath -Filter "cleanup_report_*.json" -File |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($report) {
+        return $report.FullName
+    }
+
+    return $null
+}
+
+function Copy-NetworkReport {
+    $jsonPath = Get-LastJsonReportPath
+    if (!$jsonPath) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "No network report was found yet.`n`nRun Network Health first, then use Copy Network Report.",
+            "BayouFinds Windows Cleanup Tool",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+        return
+    }
+
+    try {
+        $report = Get-Content -Path $jsonPath -Raw | ConvertFrom-Json
+        $network = $report.NetworkHealth
+        $firstAid = @($report.NetworkFirstAid)
+        if (!$network -and $firstAid.Count -eq 0) {
+            throw "The latest report does not include Network Health or Network First Aid results."
+        }
+
+        $lines = New-Object System.Collections.Generic.List[string]
+        $lines.Add("BayouFinds Network Report")
+        $lines.Add("")
+        $lines.Add("Your IP Address: $($network.YourIPAddress)")
+        $lines.Add("Gateway: $(@($network.Gateway) -join ', ')")
+        $lines.Add("DNS Servers: $(@($network.DNSServers) -join ', ')")
+        $lines.Add("Connection Type: $($network.ConnectionType)")
+        $lines.Add("Internet Reachable: $($network.InternetReachable)")
+        $lines.Add("Gateway Reachable: $($network.GatewayReachable)")
+        if ($firstAid.Count -gt 0) {
+            $lines.Add("")
+            $lines.Add("Network First Aid:")
+            foreach ($result in $firstAid) {
+                $lines.Add("- $($result.Action): $($result.Status) - $($result.Message)")
+            }
+        }
+
+        [System.Windows.Forms.Clipboard]::SetText(($lines -join [Environment]::NewLine))
+        Add-BfLogLine -Message "Network report copied to clipboard."
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Could not copy the network report.`n`n$($_.Exception.Message)",
+            "BayouFinds Windows Cleanup Tool",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+    }
 }
 
 function Show-TextWindow {
@@ -395,11 +549,37 @@ function Start-QueuedRuns {
         return
     }
 
+    foreach ($run in @($Runs | Where-Object { Test-RunRequiresAdmin -Mode $_.Mode })) {
+        if (!(Test-GuiElevated)) {
+            Show-AdministratorRequiredDialog
+            return
+        }
+    }
+
     $hasSafeCleanup = @($Runs | Where-Object { $_.Mode -eq "SafeCleanup" }).Count -gt 0
     if ($hasSafeCleanup) {
         $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "Safe Cleanup should be run only after Preview Cleanup. Personal folders are designed to be protected, but you are responsible for choosing this action.`n`nContinue?",
+            "Safe Cleanup should be run only after Preview Cleanup. Personal folders and browser data are protected by default, but you are responsible for choosing this action.`n`nContinue?",
             "Confirm Safe Cleanup",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        )
+
+        if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+            return
+        }
+    }
+
+    foreach ($repairRun in @($Runs | Where-Object { @("FlushDns", "RenewIp", "ResetNetwork") -contains $_.Mode })) {
+        $description = switch ($repairRun.Mode) {
+            "FlushDns" { "Refresh Website Addresses clears Windows saved website lookup results. It can help when websites do not open after a router, modem, or DNS change." }
+            "RenewIp" { "Get New Network Address asks your router for a network address again. Your connection may briefly reconnect. Your router may assign the same address again, which is normal." }
+            "ResetNetwork" { "Repair Windows Networking resets Winsock and the Windows IP network stack. A restart may be needed after this repair. It does not remove adapters, drivers, VPN clients, printers, or startup entries." }
+        }
+
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            "$description`n`nRun $($repairRun.DisplayName) now?",
+            $repairRun.DisplayName,
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         )
@@ -445,12 +625,14 @@ function Start-CleanupMode {
     )
 
     Add-BfLogLine -Message "Starting $DisplayName..."
+    Add-BfLogLine -Message "GUI process elevated: $(if (Test-GuiElevated) { 'Yes' } else { 'No' })"
     $script:StatusLabel.Text = "Running $DisplayName..."
     $script:RunStartedAt = Get-Date
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = "powershell.exe"
-    $process.StartInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$script:CleanupScript`" -NoMenu -Mode $Mode"
+    $guiElevated = if (Test-GuiElevated) { "Yes" } else { "No" }
+    $process.StartInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$script:CleanupScript`" -GuiElevated $guiElevated -NoMenu -Mode $Mode"
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
@@ -545,6 +727,12 @@ function Show-MainWindow {
     $licenseMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Check License")
     $previewMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Preview Cleanup")
     $bookmarkMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Back Up Browser Bookmarks")
+    $browserHealthMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Browser Health")
+    $networkHealthMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Network Health")
+    $flushDnsMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Refresh Website Addresses")
+    $renewIpMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Get New Network Address")
+    $resetNetworkMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Repair Windows Networking")
+    $copyNetworkReportMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Copy Network Report")
     $safeMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Safe Cleanup")
     $helpGuideMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Help Guide")
     $safetyNotesMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Safety Notes")
@@ -552,7 +740,7 @@ function Show-MainWindow {
     $supportMenu = New-Object System.Windows.Forms.ToolStripMenuItem("Contact Support")
 
     $fileMenu.DropDownItems.AddRange(@($openReportsMenu, $exitMenu))
-    $toolsMenu.DropDownItems.AddRange(@($licenseMenu, $previewMenu, $bookmarkMenu, $safeMenu))
+    $toolsMenu.DropDownItems.AddRange(@($licenseMenu, $previewMenu, $browserHealthMenu, $networkHealthMenu, $bookmarkMenu, $safeMenu, $flushDnsMenu, $renewIpMenu, $resetNetworkMenu, $copyNetworkReportMenu))
     $helpMenu.DropDownItems.AddRange(@($helpGuideMenu, $safetyNotesMenu, $aboutMenu, $supportMenu))
     $menu.Items.AddRange(@($fileMenu, $toolsMenu, $helpMenu))
 
@@ -639,45 +827,63 @@ function Show-MainWindow {
     $bookmarkCheck.Size = New-Object System.Drawing.Size(252, 26)
     $bookmarkCheck.Font = New-BfFont -Size 10
 
+    $browserHealthCheck = New-Object System.Windows.Forms.CheckBox
+    $browserHealthCheck.Text = "Browser Health"
+    $browserHealthCheck.Location = New-Object System.Drawing.Point(18, 216)
+    $browserHealthCheck.Size = New-Object System.Drawing.Size(252, 26)
+    $browserHealthCheck.Font = New-BfFont -Size 10
+
+    $networkHealthCheck = New-Object System.Windows.Forms.CheckBox
+    $networkHealthCheck.Text = "Network Health"
+    $networkHealthCheck.Location = New-Object System.Drawing.Point(18, 248)
+    $networkHealthCheck.Size = New-Object System.Drawing.Size(252, 26)
+    $networkHealthCheck.Font = New-BfFont -Size 10
+
     $safeCheck = New-Object System.Windows.Forms.CheckBox
     $safeCheck.Text = "Safe Cleanup"
-    $safeCheck.Location = New-Object System.Drawing.Point(18, 216)
+    $safeCheck.Location = New-Object System.Drawing.Point(18, 280)
     $safeCheck.Size = New-Object System.Drawing.Size(252, 26)
     $safeCheck.Font = New-BfFont -Size 10
 
     $script:RunSelectedButton = New-Object System.Windows.Forms.Button
     $script:RunSelectedButton.Text = "Run Selected"
-    $script:RunSelectedButton.Location = New-Object System.Drawing.Point(14, 264)
+    $script:RunSelectedButton.Location = New-Object System.Drawing.Point(14, 322)
     $script:RunSelectedButton.Size = New-Object System.Drawing.Size(256, 40)
     $script:RunSelectedButton.Font = New-BfFont -Size 10 -Style ([System.Drawing.FontStyle]::Bold)
 
     $openReportsButton = New-Object System.Windows.Forms.Button
     $openReportsButton.Text = "Open Report Folder"
-    $openReportsButton.Location = New-Object System.Drawing.Point(14, 316)
+    $openReportsButton.Location = New-Object System.Drawing.Point(14, 374)
     $openReportsButton.Size = New-Object System.Drawing.Size(256, 36)
     $openReportsButton.Font = New-BfFont -Size 9.5
 
     $viewLastReportButton = New-Object System.Windows.Forms.Button
     $viewLastReportButton.Text = "View Last Report"
-    $viewLastReportButton.Location = New-Object System.Drawing.Point(14, 362)
+    $viewLastReportButton.Location = New-Object System.Drawing.Point(14, 418)
     $viewLastReportButton.Size = New-Object System.Drawing.Size(256, 36)
     $viewLastReportButton.Font = New-BfFont -Size 9.5
 
+    $copyNetworkReportButton = New-Object System.Windows.Forms.Button
+    $copyNetworkReportButton.Text = "Copy Network Report"
+    $copyNetworkReportButton.Location = New-Object System.Drawing.Point(14, 462)
+    $copyNetworkReportButton.Size = New-Object System.Drawing.Size(256, 36)
+    $copyNetworkReportButton.Font = New-BfFont -Size 9.5
+
     $helpButton = New-Object System.Windows.Forms.Button
     $helpButton.Text = "Help"
-    $helpButton.Location = New-Object System.Drawing.Point(14, 408)
+    $helpButton.Location = New-Object System.Drawing.Point(14, 506)
     $helpButton.Size = New-Object System.Drawing.Size(124, 36)
     $helpButton.Font = New-BfFont -Size 9.5
 
     $exitButton = New-Object System.Windows.Forms.Button
     $exitButton.Text = "Exit"
-    $exitButton.Location = New-Object System.Drawing.Point(146, 408)
+    $exitButton.Location = New-Object System.Drawing.Point(146, 506)
     $exitButton.Size = New-Object System.Drawing.Size(124, 36)
     $exitButton.Font = New-BfFont -Size 9.5
 
     $script:StatusLabel = New-Object System.Windows.Forms.Label
     $script:StatusLabel.Text = "Ready"
-    $script:StatusLabel.Location = New-Object System.Drawing.Point(14, 466)
+    $script:StatusLabel.Location = New-Object System.Drawing.Point(14, 552)
     $script:StatusLabel.Size = New-Object System.Drawing.Size(256, 48)
     $script:StatusLabel.Font = New-BfFont -Size 9
     $script:StatusLabel.ForeColor = [System.Drawing.Color]::FromArgb(72, 84, 96)
@@ -689,10 +895,13 @@ function Show-MainWindow {
         $licenseCheck,
         $previewCheck,
         $bookmarkCheck,
+        $browserHealthCheck,
+        $networkHealthCheck,
         $safeCheck,
         $script:RunSelectedButton,
         $openReportsButton,
         $viewLastReportButton,
+        $copyNetworkReportButton,
         $helpButton,
         $exitButton,
         $script:StatusLabel
@@ -730,10 +939,13 @@ function Show-MainWindow {
         $licenseCheck,
         $previewCheck,
         $bookmarkCheck,
+        $browserHealthCheck,
+        $networkHealthCheck,
         $safeCheck,
         $script:RunSelectedButton,
         $openReportsButton,
         $viewLastReportButton,
+        $copyNetworkReportButton,
         $helpButton,
         $exitButton,
         $openReportsMenu,
@@ -741,6 +953,12 @@ function Show-MainWindow {
         $licenseMenu,
         $previewMenu,
         $bookmarkMenu,
+        $browserHealthMenu,
+        $networkHealthMenu,
+        $flushDnsMenu,
+        $renewIpMenu,
+        $resetNetworkMenu,
+        $copyNetworkReportMenu,
         $safeMenu
     )
 
@@ -749,6 +967,8 @@ function Show-MainWindow {
         if ($licenseCheck.Checked) { $runs += New-RunItem -Mode "LicenseCheck" -DisplayName "License Check" }
         if ($previewCheck.Checked) { $runs += New-RunItem -Mode "Preview" -DisplayName "Preview Cleanup" }
         if ($bookmarkCheck.Checked) { $runs += New-RunItem -Mode "BackupBookmarks" -DisplayName "Browser Bookmark Backup" }
+        if ($browserHealthCheck.Checked) { $runs += New-RunItem -Mode "BrowserHealth" -DisplayName "Browser Health" }
+        if ($networkHealthCheck.Checked) { $runs += New-RunItem -Mode "NetworkHealth" -DisplayName "Network Health" }
         if ($safeCheck.Checked) { $runs += New-RunItem -Mode "SafeCleanup" -DisplayName "Safe Cleanup" }
         Start-QueuedRuns -Runs $runs
     }
@@ -756,6 +976,7 @@ function Show-MainWindow {
     $script:RunSelectedButton.Add_Click($runSelected)
     $openReportsButton.Add_Click({ Open-ReportsFolder })
     $viewLastReportButton.Add_Click({ Open-LastReport })
+    $copyNetworkReportButton.Add_Click({ Copy-NetworkReport })
     $helpButton.Add_Click({ Show-HelpGuide })
     $exitButton.Add_Click({ $form.Close() })
 
@@ -763,8 +984,14 @@ function Show-MainWindow {
     $exitMenu.Add_Click({ $form.Close() })
     $licenseMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "LicenseCheck" -DisplayName "License Check") })
     $previewMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "Preview" -DisplayName "Preview Cleanup") })
+    $browserHealthMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "BrowserHealth" -DisplayName "Browser Health") })
+    $networkHealthMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "NetworkHealth" -DisplayName "Network Health") })
     $bookmarkMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "BackupBookmarks" -DisplayName "Browser Bookmark Backup") })
     $safeMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "SafeCleanup" -DisplayName "Safe Cleanup") })
+    $flushDnsMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "FlushDns" -DisplayName "Refresh Website Addresses") })
+    $renewIpMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "RenewIp" -DisplayName "Get New Network Address") })
+    $resetNetworkMenu.Add_Click({ Start-QueuedRuns -Runs @(New-RunItem -Mode "ResetNetwork" -DisplayName "Repair Windows Networking") })
+    $copyNetworkReportMenu.Add_Click({ Copy-NetworkReport })
     $helpGuideMenu.Add_Click({ Show-HelpGuide })
     $safetyNotesMenu.Add_Click({ Show-SafetyNotes })
     $aboutMenu.Add_Click({ Show-AboutWindow })

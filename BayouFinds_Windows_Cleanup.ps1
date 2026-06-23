@@ -8,10 +8,12 @@ Run PowerShell as Administrator.
 param(
     [switch]$DryRun,
     [switch]$SkipSFC = $true,
-    [ValidateSet("Preview", "SafeCleanup", "LicenseCheck", "BackupBookmarks")]
+    [ValidateSet("Preview", "SafeCleanup", "LicenseCheck", "BackupBookmarks", "BrowserHealth", "NetworkHealth", "FlushDns", "RenewIp", "ResetNetwork")]
     [string]$Mode,
     [switch]$NoMenu,
     [string]$OutputDir,
+    [ValidateSet("Yes", "No", "Unknown")]
+    [string]$GuiElevated = "Unknown",
     [string]$SessionId = ([guid]::NewGuid().ToString())
 )
 
@@ -89,6 +91,9 @@ function New-CleanupReportModel {
         CleanupTargetsEstimated = 0
         CleanupCategoriesProcessed = @()
         CleanupCategories = @()
+        BrowserHealth = @()
+        NetworkHealth = [ordered]@{}
+        NetworkFirstAid = @()
         BrowserBackups = @()
         ItemsSkipped = @()
         Notes = @($script:PendingReportNotes)
@@ -143,6 +148,30 @@ function Add-ReportBrowserBackup {
 
     if ($script:CleanupReport -and $BackupResult) {
         $script:CleanupReport.BrowserBackups += $BackupResult
+    }
+}
+
+function Set-ReportBrowserHealth {
+    param([object[]]$BrowserHealth)
+
+    if ($script:CleanupReport) {
+        $script:CleanupReport.BrowserHealth = @($BrowserHealth)
+    }
+}
+
+function Set-ReportNetworkHealth {
+    param([object]$NetworkHealth)
+
+    if ($script:CleanupReport -and $NetworkHealth) {
+        $script:CleanupReport.NetworkHealth = $NetworkHealth
+    }
+}
+
+function Add-ReportNetworkFirstAid {
+    param([object]$Result)
+
+    if ($script:CleanupReport -and $Result) {
+        $script:CleanupReport.NetworkFirstAid += $Result
     }
 }
 
@@ -290,6 +319,40 @@ function Format-ReportBytes {
     return "{0:N1} {1}" -f $amount, $units[$unitIndex]
 }
 
+function Format-ReportValue {
+    param([object]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        return "Unknown"
+    }
+
+    return [string]$Value
+}
+
+function Format-ReportList {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return "Unknown"
+    }
+
+    if ($Value -is [array]) {
+        $items = @($Value | Where-Object { ![string]::IsNullOrWhiteSpace([string]$_) })
+        if ($items.Count -eq 0) {
+            return "Unknown"
+        }
+        return ($items -join ", ")
+    }
+
+    return Format-ReportValue -Value $Value
+}
+
+function ConvertTo-ReportHtml {
+    param([object]$Value)
+
+    return [System.Net.WebUtility]::HtmlEncode((Format-ReportValue -Value $Value))
+}
+
 function Get-ReportFilesIdentified {
     if (!$script:CleanupReport -or !$script:CleanupReport.CleanupCategories) {
         return 0L
@@ -324,7 +387,101 @@ function Get-ReportCleanupStatus {
         return "Bookmark backup completed"
     }
 
+    if ($RunMode -eq "BrowserHealth") {
+        return "Browser Health complete"
+    }
+
+    if ($RunMode -eq "NetworkHealth") {
+        return "Network Health complete"
+    }
+
+    if (@("FlushDns", "RenewIp", "ResetNetwork") -contains $RunMode) {
+        return "Network First Aid complete"
+    }
+
     return "Report generated"
+}
+
+function New-BrowserHealthHtml {
+    if (!$script:CleanupReport -or !$script:CleanupReport.BrowserHealth -or $script:CleanupReport.BrowserHealth.Count -eq 0) {
+        return "<h2>Browser Health</h2><p>No Browser Health scan results were recorded for this run.</p>"
+    }
+
+    $rows = ""
+    foreach ($browser in @($script:CleanupReport.BrowserHealth)) {
+        $rows += "<tr><td>$(ConvertTo-ReportHtml $browser.Name)</td><td>$(ConvertTo-ReportHtml $browser.Version)</td><td>$(ConvertTo-ReportHtml $browser.DefaultBrowser)</td><td>$(ConvertTo-ReportHtml $browser.CacheSize)</td><td>$(ConvertTo-ReportHtml $browser.ExtensionCount)</td><td>$(ConvertTo-ReportHtml $browser.UpdateStatus)</td></tr>`n"
+    }
+
+    return @"
+<h2>Browser Health</h2>
+<p>Browser Health checks Chrome, Edge, and Firefox without collecting passwords, cookies, browsing history, or private browser data.</p>
+<table>
+<tr><td><strong>Browser</strong></td><td><strong>Version</strong></td><td><strong>Default Browser</strong></td><td><strong>Cache Estimate</strong></td><td><strong>Extensions</strong></td><td><strong>Update Status</strong></td></tr>
+$rows
+</table>
+"@
+}
+
+function New-NetworkHealthHtml {
+    if (!$script:CleanupReport -or !$script:CleanupReport.NetworkHealth -or $script:CleanupReport.NetworkHealth.Count -eq 0) {
+        return "<h2>Network Health</h2><p>No Network Health scan results were recorded for this run.</p>"
+    }
+
+    $network = $script:CleanupReport.NetworkHealth
+    $addressRows = ""
+    foreach ($address in @($network.ActiveIPv4Addresses)) {
+        $primary = if ($address.IsPrimary) { "Primary" } else { "" }
+        $addressRows += "<tr><td>$(ConvertTo-ReportHtml $address.Address)</td><td>$(ConvertTo-ReportHtml $primary)</td><td>$(ConvertTo-ReportHtml $address.ConnectionType)</td><td>$(ConvertTo-ReportHtml $address.InterfaceAlias)</td></tr>`n"
+    }
+    if (!$addressRows) {
+        $addressRows = "<tr><td>Unknown</td><td></td><td>Unknown</td><td>Unknown</td></tr>"
+    }
+
+    $vpnText = if ($network.VPNAdaptersDetected -and $network.VPNAdaptersDetected.Count -gt 0) {
+        (@($network.VPNAdaptersDetected) | ForEach-Object { "$($_.Name) ($($_.Status))" }) -join ", "
+    }
+    else {
+        "None obvious"
+    }
+
+    return @"
+<h2>Network Health</h2>
+<table>
+<tr><td><strong>Your IP Address</strong></td><td>$(ConvertTo-ReportHtml $network.YourIPAddress)</td></tr>
+<tr><td><strong>Gateway</strong></td><td>$(ConvertTo-ReportHtml (Format-ReportList $network.Gateway))</td></tr>
+<tr><td><strong>DNS Servers</strong></td><td>$(ConvertTo-ReportHtml (Format-ReportList $network.DNSServers))</td></tr>
+<tr><td><strong>Connection Type</strong></td><td>$(ConvertTo-ReportHtml $network.ConnectionType)</td></tr>
+<tr><td><strong>Wi-Fi and Ethernet Connected Together</strong></td><td>$(ConvertTo-ReportHtml $network.WifiAndEthernetConnected)</td></tr>
+<tr><td><strong>VPN Adapters Detected</strong></td><td>$(ConvertTo-ReportHtml $vpnText)</td></tr>
+<tr><td><strong>Internet Reachable</strong></td><td>$(ConvertTo-ReportHtml $network.InternetReachable)</td></tr>
+<tr><td><strong>Gateway Reachable</strong></td><td>$(ConvertTo-ReportHtml $network.GatewayReachable)</td></tr>
+</table>
+<h3>Active IPv4 Addresses</h3>
+<table>
+<tr><td><strong>Address</strong></td><td><strong>Primary</strong></td><td><strong>Type</strong></td><td><strong>Adapter</strong></td></tr>
+$addressRows
+</table>
+"@
+}
+
+function New-NetworkFirstAidHtml {
+    if (!$script:CleanupReport -or !$script:CleanupReport.NetworkFirstAid -or $script:CleanupReport.NetworkFirstAid.Count -eq 0) {
+        return "<h2>Network First Aid</h2><p>No Network First Aid actions were run during this session.</p>"
+    }
+
+    $rows = ""
+    foreach ($result in @($script:CleanupReport.NetworkFirstAid)) {
+        $rows += "<tr><td>$(ConvertTo-ReportHtml $result.Action)</td><td>$(ConvertTo-ReportHtml $result.Status)</td><td>$(ConvertTo-ReportHtml $result.Message)</td><td>$(ConvertTo-ReportHtml $result.PreviousIPv4)</td><td>$(ConvertTo-ReportHtml $result.CurrentIPv4)</td><td>$(ConvertTo-ReportHtml (Format-ReportList $result.Gateway))</td><td>$(ConvertTo-ReportHtml (Format-ReportList $result.DNSServers))</td></tr>`n"
+    }
+
+    return @"
+<h2>Network First Aid</h2>
+<p>These repair actions run only when selected by the user.</p>
+<table>
+<tr><td><strong>Action</strong></td><td><strong>Status</strong></td><td><strong>Message</strong></td><td><strong>Previous IP</strong></td><td><strong>Current IP</strong></td><td><strong>Gateway</strong></td><td><strong>DNS Servers</strong></td></tr>
+$rows
+</table>
+"@
 }
 
 function Write-HtmlReport {
@@ -347,6 +504,9 @@ function Write-HtmlReport {
     $reportRunMode = if ($script:CleanupReport) { $script:CleanupReport.RunMode } else { $null }
     $cleanupStatus = Get-ReportCleanupStatus -RunMode $reportRunMode
     $potentialRecovery = Format-ReportBytes -Bytes $recoverableBytes
+    $browserHealthHtml = New-BrowserHealthHtml
+    $networkHealthHtml = New-NetworkHealthHtml
+    $networkFirstAidHtml = New-NetworkFirstAidHtml
 
     $html = @"
 <!doctype html>
@@ -401,6 +561,12 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <h2>Output Location</h2>
 <p>Your cleanup logs and reports are saved here:</p>
 <p><strong>$LogDir</strong></p>
+
+$browserHealthHtml
+
+$networkHealthHtml
+
+$networkFirstAidHtml
 
 <h2>Notes</h2>
 <p>This report confirms the tool ran and generated a cleanup session log.</p>
@@ -595,9 +761,25 @@ function Test-WindowsPlatform {
 }
 
 function Test-Admin {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (!(Test-WindowsPlatform)) {
+        return $false
+    }
+
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return [bool]$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+    catch {
+        Write-Log "WARN: Engine elevation check failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-RunModeRequiresAdmin {
+    param([string]$RunMode)
+
+    return @("ResetNetwork") -contains $RunMode
 }
 
 function Show-Splash {
@@ -667,9 +849,14 @@ function Show-MainMenu {
         Write-Host ""
         Write-Host "1. Run Safe Cleanup"
         Write-Host "2. Preview Cleanup"
-        Write-Host "3. Backup Browser Bookmarks"
-        Write-Host "4. View Last Report"
-        Write-Host "5. Exit"
+        Write-Host "3. Browser Health"
+        Write-Host "4. Network Health"
+        Write-Host "5. Backup Browser Bookmarks"
+        Write-Host "6. Refresh Website Addresses"
+        Write-Host "7. Get New Network Address"
+        Write-Host "8. Repair Windows Networking"
+        Write-Host "9. View Last Report"
+        Write-Host "10. Exit"
         Write-Host ""
 
         $choice = Read-Host "Choose an option"
@@ -681,23 +868,507 @@ function Show-MainMenu {
                 return "Preview"
             }
             "3" {
-                return "BackupBookmarks"
+                return "BrowserHealth"
             }
             "4" {
+                return "NetworkHealth"
+            }
+            "5" {
+                return "BackupBookmarks"
+            }
+            "6" {
+                Write-Host "Refresh Website Addresses clears Windows saved website lookup results. It can help when websites do not open after a router, modem, or DNS change." -ForegroundColor Yellow
+                $confirm = Read-Host "Type YES to run Refresh Website Addresses"
+                if ($confirm -eq "YES") { return "FlushDns" }
+            }
+            "7" {
+                Write-Host "Get New Network Address asks your router for a network address again. Your router may assign the same address again, which is normal." -ForegroundColor Yellow
+                $confirm = Read-Host "Type YES to run Get New Network Address"
+                if ($confirm -eq "YES") { return "RenewIp" }
+            }
+            "8" {
+                Write-Host "Repair Windows Networking resets Winsock and the Windows IP network stack. A restart may be needed after this repair." -ForegroundColor Yellow
+                $confirm = Read-Host "Type YES to run Repair Windows Networking"
+                if ($confirm -eq "YES") { return "ResetNetwork" }
+            }
+            "9" {
                 Open-LastReport
                 Read-Host "Press Enter to return to the menu"
             }
-            "5" {
+            "10" {
                 return "Exit"
             }
             default {
-                Write-Host "Please choose 1, 2, 3, 4, or 5." -ForegroundColor Yellow
+                Write-Host "Please choose a menu option." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
             }
         }
     }
 }
 #endregion Platform and UI
+
+#region Browser and network health
+function Get-FolderSizeEstimate {
+    param([string[]]$Paths)
+
+    $bytes = 0L
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace($path) -or !(Test-Path -Path $path -PathType Container)) {
+            continue
+        }
+
+        try {
+            Get-ChildItem -Path $path -Force -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+                $bytes += [int64]$_.Length
+            }
+        }
+        catch {
+            Write-Log "WARN: Could not estimate folder size for $path. $($_.Exception.Message)"
+        }
+    }
+
+    return $bytes
+}
+
+function Get-FileVersionValue {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or !(Test-Path -Path $Path -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $version = (Get-Item -Path $Path -ErrorAction Stop).VersionInfo.ProductVersion
+        if (!$version) {
+            $version = (Get-Item -Path $Path -ErrorAction Stop).VersionInfo.FileVersion
+        }
+        return $version
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-DefaultBrowserProgId {
+    $userChoicePath = "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"
+    try {
+        return (Get-ItemProperty -Path $userChoicePath -Name ProgId -ErrorAction Stop).ProgId
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-BrowserDefaultStatus {
+    param(
+        [string]$Browser,
+        [string]$ProgId
+    )
+
+    if (!$ProgId) {
+        return "Unknown"
+    }
+
+    $normalized = $ProgId.ToLowerInvariant()
+    if ($Browser -eq "Google Chrome" -and $normalized -like "*chrome*") {
+        return "Yes"
+    }
+    if ($Browser -eq "Microsoft Edge" -and ($normalized -like "*edge*" -or $normalized -like "*mse*")) {
+        return "Yes"
+    }
+    if ($Browser -eq "Mozilla Firefox" -and $normalized -like "*firefox*") {
+        return "Yes"
+    }
+
+    return "No"
+}
+
+function Get-ChromiumProfiles {
+    param([string]$UserDataPath)
+
+    if ([string]::IsNullOrWhiteSpace($UserDataPath) -or !(Test-Path -Path $UserDataPath -PathType Container)) {
+        return @()
+    }
+
+    return @(Get-ChildItem -Path $UserDataPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -eq "Default" -or $_.Name -like "Profile *"
+    })
+}
+
+function Get-ChromiumExtensionCount {
+    param([object[]]$Profiles)
+
+    $count = 0
+    foreach ($profile in @($Profiles)) {
+        $extensionsPath = Join-Path -Path $profile.FullName -ChildPath "Extensions"
+        if (Test-Path -Path $extensionsPath -PathType Container) {
+            $count += @(Get-ChildItem -Path $extensionsPath -Directory -ErrorAction SilentlyContinue).Count
+        }
+    }
+
+    return $count
+}
+
+function Get-ChromiumCachePaths {
+    param([object[]]$Profiles)
+
+    $paths = @()
+    foreach ($profile in @($Profiles)) {
+        $paths += Join-Path -Path $profile.FullName -ChildPath "Cache"
+        $paths += Join-Path -Path $profile.FullName -ChildPath "Code Cache"
+        $paths += Join-Path -Path $profile.FullName -ChildPath "GPUCache"
+    }
+
+    return $paths
+}
+
+function Get-FirefoxProfiles {
+    if (!$env:APPDATA) {
+        return @()
+    }
+
+    $profilesRoot = Join-Path -Path $env:APPDATA -ChildPath "Mozilla\Firefox\Profiles"
+    if (!(Test-Path -Path $profilesRoot -PathType Container)) {
+        return @()
+    }
+
+    return @(Get-ChildItem -Path $profilesRoot -Directory -ErrorAction SilentlyContinue)
+}
+
+function Get-FirefoxExtensionCount {
+    param([object[]]$Profiles)
+
+    $count = 0
+    foreach ($profile in @($Profiles)) {
+        $extensionsPath = Join-Path -Path $profile.FullName -ChildPath "extensions"
+        if (Test-Path -Path $extensionsPath -PathType Container) {
+            $count += @(Get-ChildItem -Path $extensionsPath -File -ErrorAction SilentlyContinue).Count
+            $count += @(Get-ChildItem -Path $extensionsPath -Directory -ErrorAction SilentlyContinue).Count
+        }
+    }
+
+    return $count
+}
+
+function Get-FirefoxCachePaths {
+    param([object[]]$Profiles)
+
+    $paths = @()
+    if (!$env:LOCALAPPDATA) {
+        return $paths
+    }
+
+    foreach ($profile in @($Profiles)) {
+        $paths += Join-Path -Path $env:LOCALAPPDATA -ChildPath "Mozilla\Firefox\Profiles\$($profile.Name)\cache2"
+        $paths += Join-Path -Path $env:LOCALAPPDATA -ChildPath "Mozilla\Firefox\Profiles\$($profile.Name)\startupCache"
+    }
+
+    return $paths
+}
+
+function New-BrowserHealthResult {
+    param(
+        [string]$Name,
+        [string]$ExePath,
+        [bool]$Installed,
+        [string]$Version,
+        [string]$DefaultBrowserStatus,
+        [nullable[int64]]$CacheBytes,
+        [nullable[int]]$ExtensionCount,
+        [string]$UpdateStatus
+    )
+
+    return [ordered]@{
+        Name = $Name
+        Installed = $Installed
+        Version = Format-ReportValue -Value $Version
+        DefaultBrowser = Format-ReportValue -Value $DefaultBrowserStatus
+        CacheBytes = $CacheBytes
+        CacheSize = if ($null -ne $CacheBytes) { Format-ReportBytes -Bytes $CacheBytes } else { "Unknown" }
+        ExtensionCount = $ExtensionCount
+        UpdateStatus = if ($UpdateStatus) { $UpdateStatus } else { "Unknown" }
+        ExePath = $ExePath
+    }
+}
+
+function Get-BrowserHealth {
+    Write-Log "Browser Health scan started. Passwords, cookies, browsing history, and private browser data are not collected."
+
+    $defaultProgId = Get-DefaultBrowserProgId
+    $results = @()
+
+    $chromeExe = @(
+        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Google\Chrome\Application\chrome.exe"),
+        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
+        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\Application\chrome.exe")
+    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    $chromeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\User Data" } else { $null }
+    $chromeProfiles = Get-ChromiumProfiles -UserDataPath $chromeUserData
+    $chromeInstalled = [bool]$chromeExe -or (Test-Path -Path $chromeUserData -PathType Container)
+    $chromeCacheBytes = if ($chromeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $chromeProfiles) } else { $null }
+    $chromeExtensionCount = if ($chromeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $chromeProfiles } else { $null }
+    $results += New-BrowserHealthResult -Name "Google Chrome" -ExePath $chromeExe -Installed $chromeInstalled -Version (Get-FileVersionValue -Path $chromeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Google Chrome" -ProgId $defaultProgId) -CacheBytes $chromeCacheBytes -ExtensionCount $chromeExtensionCount -UpdateStatus "Unknown"
+
+    $edgeExe = @(
+        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\Application\msedge.exe")
+    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    $edgeUserData = if ($env:LOCALAPPDATA) { Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data" } else { $null }
+    $edgeProfiles = Get-ChromiumProfiles -UserDataPath $edgeUserData
+    $edgeInstalled = [bool]$edgeExe -or (Test-Path -Path $edgeUserData -PathType Container)
+    $edgeCacheBytes = if ($edgeProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-ChromiumCachePaths -Profiles $edgeProfiles) } else { $null }
+    $edgeExtensionCount = if ($edgeProfiles.Count -gt 0) { Get-ChromiumExtensionCount -Profiles $edgeProfiles } else { $null }
+    $results += New-BrowserHealthResult -Name "Microsoft Edge" -ExePath $edgeExe -Installed $edgeInstalled -Version (Get-FileVersionValue -Path $edgeExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Microsoft Edge" -ProgId $defaultProgId) -CacheBytes $edgeCacheBytes -ExtensionCount $edgeExtensionCount -UpdateStatus "Unknown"
+
+    $firefoxExe = @(
+        (Join-Path -Path ${env:ProgramFiles} -ChildPath "Mozilla Firefox\firefox.exe"),
+        (Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Mozilla Firefox\firefox.exe"),
+        (Join-Path -Path $env:LOCALAPPDATA -ChildPath "Mozilla Firefox\firefox.exe")
+    ) | Where-Object { $_ } | Where-Object { Test-Path -Path $_ -PathType Leaf } | Select-Object -First 1
+    $firefoxProfiles = Get-FirefoxProfiles
+    $firefoxInstalled = [bool]$firefoxExe -or $firefoxProfiles.Count -gt 0
+    $firefoxCacheBytes = if ($firefoxProfiles.Count -gt 0) { Get-FolderSizeEstimate -Paths (Get-FirefoxCachePaths -Profiles $firefoxProfiles) } else { $null }
+    $firefoxExtensionCount = if ($firefoxProfiles.Count -gt 0) { Get-FirefoxExtensionCount -Profiles $firefoxProfiles } else { $null }
+    $results += New-BrowserHealthResult -Name "Mozilla Firefox" -ExePath $firefoxExe -Installed $firefoxInstalled -Version (Get-FileVersionValue -Path $firefoxExe) -DefaultBrowserStatus (Get-BrowserDefaultStatus -Browser "Mozilla Firefox" -ProgId $defaultProgId) -CacheBytes $firefoxCacheBytes -ExtensionCount $firefoxExtensionCount -UpdateStatus "Unknown"
+
+    Set-ReportBrowserHealth -BrowserHealth $results
+    Add-ReportNote -Message "Browser Health reports browser install, version, cache estimate, and extension count only. Passwords, cookies, browsing history, and private browser data are not collected."
+    Write-Log "Browser Health scan complete."
+    return $results
+}
+
+function Get-NetworkAdapterKind {
+    param([object]$Adapter)
+
+    $text = "$($Adapter.Name) $($Adapter.InterfaceDescription)".ToLowerInvariant()
+    if ($text -match "wi-fi|wifi|wireless|wlan|802\.11") {
+        return "Wi-Fi"
+    }
+    if ($text -match "ethernet|gbe|lan|realtek|intel\(r\)") {
+        return "Ethernet"
+    }
+    return "Other"
+}
+
+function Test-VpnAdapterName {
+    param([object]$Adapter)
+
+    $text = "$($Adapter.Name) $($Adapter.InterfaceDescription)".ToLowerInvariant()
+    return $text -match "vpn|wireguard|openvpn|tap-|tap |tun |tunnel|tailscale|zerotier|zscaler|globalprotect|anyconnect|cisco|fortinet|nord|expressvpn|protonvpn|surfshark"
+}
+
+function Get-PrimaryIPv4Address {
+    $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        Sort-Object RouteMetric, InterfaceMetric |
+        Select-Object -First 1
+
+    if (!$route) {
+        return $null
+    }
+
+    $address = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -and $_.IPAddress -notlike "169.254.*" } |
+        Select-Object -First 1
+
+    if (!$address) {
+        return $null
+    }
+
+    return $address.IPAddress
+}
+
+function Test-HostReachable {
+    param([string]$Target)
+
+    if ([string]::IsNullOrWhiteSpace($Target)) {
+        return "Unknown"
+    }
+
+    try {
+        if (Test-Connection -ComputerName $Target -Count 1 -Quiet -ErrorAction Stop) {
+            return "Yes"
+        }
+        return "No"
+    }
+    catch {
+        return "Unknown"
+    }
+}
+
+function Get-NetworkHealth {
+    Write-Log "Network Health scan started."
+
+    $primaryIpv4 = Get-PrimaryIPv4Address
+    $ipConfigurations = @(Get-NetIPConfiguration -ErrorAction SilentlyContinue)
+    $connectedAdapters = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
+    if ($connectedAdapters.Count -eq 0) {
+        $connectedAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })
+    }
+
+    $addresses = @()
+    $gateways = @()
+    $dnsServers = @()
+    foreach ($config in $ipConfigurations) {
+        $adapter = Get-NetAdapter -InterfaceIndex $config.InterfaceIndex -ErrorAction SilentlyContinue
+        $kind = if ($adapter) { Get-NetworkAdapterKind -Adapter $adapter } else { "Other" }
+
+        foreach ($ip in @($config.IPv4Address)) {
+            if (!$ip.IPAddress) {
+                continue
+            }
+
+            $addresses += [ordered]@{
+                Address = $ip.IPAddress
+                InterfaceAlias = $config.InterfaceAlias
+                ConnectionType = $kind
+                IsPrimary = ($ip.IPAddress -eq $primaryIpv4)
+            }
+        }
+
+        foreach ($gateway in @($config.IPv4DefaultGateway)) {
+            if ($gateway.NextHop -and $gateways -notcontains $gateway.NextHop) {
+                $gateways += $gateway.NextHop
+            }
+        }
+
+        foreach ($server in @($config.DNSServer.ServerAddresses)) {
+            if ($server -and $server -match "^\d{1,3}(\.\d{1,3}){3}$" -and $dnsServers -notcontains $server) {
+                $dnsServers += $server
+            }
+        }
+    }
+
+    $hasWifi = $false
+    $hasEthernet = $false
+    foreach ($adapter in $connectedAdapters) {
+        $kind = Get-NetworkAdapterKind -Adapter $adapter
+        if ($kind -eq "Wi-Fi") {
+            $hasWifi = $true
+        }
+        elseif ($kind -eq "Ethernet") {
+            $hasEthernet = $true
+        }
+    }
+
+    $vpnAdapters = @()
+    foreach ($adapter in @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" })) {
+        if (Test-VpnAdapterName -Adapter $adapter) {
+            $vpnAdapters += [ordered]@{
+                Name = $adapter.Name
+                Description = $adapter.InterfaceDescription
+                Status = $adapter.Status
+            }
+        }
+    }
+
+    $connectionType = if ($hasWifi -and $hasEthernet) {
+        "both"
+    }
+    elseif ($hasWifi) {
+        "Wi-Fi"
+    }
+    elseif ($hasEthernet) {
+        "Ethernet"
+    }
+    else {
+        "Unknown"
+    }
+
+    $gatewayReachable = if ($gateways.Count -gt 0) { Test-HostReachable -Target $gateways[0] } else { "Unknown" }
+    $internetReachable = Test-HostReachable -Target "1.1.1.1"
+
+    $result = [ordered]@{
+        YourIPAddress = Format-ReportValue -Value $primaryIpv4
+        ActiveIPv4Addresses = @($addresses)
+        Gateway = @($gateways)
+        DNSServers = @($dnsServers)
+        ConnectionType = $connectionType
+        WifiAndEthernetConnected = [bool]($hasWifi -and $hasEthernet)
+        VPNAdaptersDetected = @($vpnAdapters)
+        InternetReachable = $internetReachable
+        GatewayReachable = $gatewayReachable
+        CheckedAt = (Get-Date).ToString("o")
+    }
+
+    Set-ReportNetworkHealth -NetworkHealth $result
+    Write-Log "Network Health scan complete. Primary IPv4: $($result.YourIPAddress)"
+    return $result
+}
+
+function New-NetworkFirstAidResult {
+    param(
+        [string]$Action,
+        [string]$Description,
+        [string]$Status,
+        [int]$ExitCode,
+        [string]$Message,
+        [string]$PreviousIPv4 = $null,
+        [string]$CurrentIPv4 = $null,
+        [object]$NetworkHealth = $null
+    )
+
+    return [ordered]@{
+        Action = $Action
+        Description = $Description
+        Status = $Status
+        ExitCode = $ExitCode
+        Message = $Message
+        PreviousIPv4 = Format-ReportValue -Value $PreviousIPv4
+        CurrentIPv4 = Format-ReportValue -Value $CurrentIPv4
+        Gateway = if ($NetworkHealth) { @($NetworkHealth.Gateway) } else { @() }
+        DNSServers = if ($NetworkHealth) { @($NetworkHealth.DNSServers) } else { @() }
+        RanAt = (Get-Date).ToString("o")
+    }
+}
+
+function Invoke-FlushDnsFirstAid {
+    $description = "Refresh Website Addresses clears Windows saved website lookup results. It can help when websites do not open after a router, modem, or DNS change."
+    Write-Log "Network First Aid: Refresh Website Addresses started."
+    ipconfig.exe /flushdns | Tee-Object -FilePath $LogFile -Append | Out-Null
+    $exitCode = $LASTEXITCODE
+    $status = if ($exitCode -eq 0) { "Completed" } else { "Failed" }
+    $result = New-NetworkFirstAidResult -Action "Refresh Website Addresses" -Description $description -Status $status -ExitCode $exitCode -Message "DNS refresh finished."
+    Add-ReportNetworkFirstAid -Result $result
+    return $result
+}
+
+function Invoke-RenewIpFirstAid {
+    $description = "Get New Network Address asks your router for a network address again. Your router may assign the same address again, which is normal."
+    Write-Log "Network First Aid: Get New Network Address started."
+    $previousIpv4 = Get-PrimaryIPv4Address
+    ipconfig.exe /renew | Tee-Object -FilePath $LogFile -Append | Out-Null
+    $exitCode = $LASTEXITCODE
+    Start-Sleep -Seconds 2
+    $networkHealth = Get-NetworkHealth
+    $currentIpv4 = Get-PrimaryIPv4Address
+    $message = if ($previousIpv4 -and $currentIpv4 -and $previousIpv4 -eq $currentIpv4) {
+        "Your router assigned the same address again. This is normal."
+    }
+    else {
+        "Network address renewal finished."
+    }
+    $status = if ($exitCode -eq 0) { "Completed" } else { "Failed" }
+    $result = New-NetworkFirstAidResult -Action "Get New Network Address" -Description $description -Status $status -ExitCode $exitCode -Message $message -PreviousIPv4 $previousIpv4 -CurrentIPv4 $currentIpv4 -NetworkHealth $networkHealth
+    Add-ReportNetworkFirstAid -Result $result
+    return $result
+}
+
+function Invoke-ResetNetworkFirstAid {
+    $description = "Repair Windows Networking resets Winsock and the Windows IP network stack. A restart may be needed after this repair."
+    Write-Log "Network First Aid: Repair Windows Networking started."
+    netsh.exe winsock reset | Tee-Object -FilePath $LogFile -Append | Out-Null
+    $winsockExitCode = $LASTEXITCODE
+    netsh.exe int ip reset | Tee-Object -FilePath $LogFile -Append | Out-Null
+    $ipResetExitCode = $LASTEXITCODE
+    $exitCode = if ($winsockExitCode -eq 0 -and $ipResetExitCode -eq 0) { 0 } else { 1 }
+    $status = if ($exitCode -eq 0) { "Completed" } else { "Failed" }
+    $networkHealth = Get-NetworkHealth
+    $result = New-NetworkFirstAidResult -Action "Repair Windows Networking" -Description $description -Status $status -ExitCode $exitCode -Message "Windows networking repair finished. Restart Windows if connection problems continue." -CurrentIPv4 (Get-PrimaryIPv4Address) -NetworkHealth $networkHealth
+    Add-ReportNetworkFirstAid -Result $result
+    return $result
+}
+
 
 #region Browser bookmark backup
 function New-BrowserBackupResult {
@@ -995,7 +1666,7 @@ function Get-SafeCleanupCategories {
             -Label "Internet cache" `
             -Description "Windows internet cache files for the current user." `
             -Paths @((Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Windows\INetCache")) `
-            -DefaultEnabled $true `
+            -DefaultEnabled $false `
             -RequiresAdmin $false `
             -RequiresConfirmation $false `
             -RiskLevel "Low"
@@ -1005,7 +1676,7 @@ function Get-SafeCleanupCategories {
             -Label "Windows web cache" `
             -Description "Windows web cache files for the current user." `
             -Paths @((Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Windows\WebCache")) `
-            -DefaultEnabled $true `
+            -DefaultEnabled $false `
             -RequiresAdmin $false `
             -RequiresConfirmation $false `
             -RiskLevel "Low"
@@ -1015,7 +1686,7 @@ function Get-SafeCleanupCategories {
             -Label "Microsoft Edge cache" `
             -Description "Microsoft Edge cache files for the default profile. Skipped while Edge is running." `
             -Paths @((Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data\Default\Cache")) `
-            -DefaultEnabled $true `
+            -DefaultEnabled $false `
             -RequiresAdmin $false `
             -RequiresConfirmation $false `
             -SkipIfProcessRunning @("msedge") `
@@ -1026,7 +1697,7 @@ function Get-SafeCleanupCategories {
             -Label "Google Chrome cache" `
             -Description "Google Chrome cache files for the default profile. Skipped while Chrome is running." `
             -Paths @((Join-Path -Path $env:LOCALAPPDATA -ChildPath "Google\Chrome\User Data\Default\Cache")) `
-            -DefaultEnabled $true `
+            -DefaultEnabled $false `
             -RequiresAdmin $false `
             -RequiresConfirmation $false `
             -SkipIfProcessRunning @("chrome") `
@@ -1267,6 +1938,17 @@ function Invoke-CleanupCategory {
 
     $Category.StartedAt = (Get-Date).ToString("o")
 
+    if ($Category.RequiresAdmin -and !(Test-Admin)) {
+        Write-Log "SKIP: $($Category.Label) requires Administrator access."
+        $Category.Status = "Skipped"
+        $Category.SkippedReason = "Administrator access required"
+        $Category.PathsSkipped += $Category.Paths
+        $Category.EndedAt = (Get-Date).ToString("o")
+        Add-ReportCleanupCategory -Category $Category
+        Add-ReportSkippedItem -Label $Category.Label -Path ($Category.Paths -join "; ") -Reason "Administrator access required"
+        return
+    }
+
     if (!$Category.DefaultEnabled) {
         Write-Log "SKIP: $($Category.Label) is not enabled by default."
         $Category.Status = "Skipped"
@@ -1361,6 +2043,8 @@ function Invoke-PreviewWorkflow {
 
     Write-Log "Preview mode measuring cleanup categories. No files will be deleted."
     Add-ReportNote -Message "Preview mode measured cleanup categories without deleting files."
+    Get-BrowserHealth | Out-Null
+    Get-NetworkHealth | Out-Null
 
     foreach ($category in $cleanupCategories) {
         $measuredCategory = Measure-CleanupCategory -Category $category
@@ -1383,6 +2067,7 @@ function Invoke-SafeCleanupWorkflow {
 
     Write-Log "Restore point creation skipped. Restore points are optional and are not created automatically."
     Add-ReportNote -Message "Restore point creation skipped by default."
+    Add-ReportNote -Message "Browser cache and browser data cleanup are not run automatically."
 
     foreach ($category in $cleanupCategories) {
         Invoke-CleanupCategory -Category $category
@@ -1391,16 +2076,17 @@ function Invoke-SafeCleanupWorkflow {
     Write-Log "Windows Update download cache cleanup skipped. Windows Update reset is not part of safe cleanup."
     Add-ReportNote -Message "Windows Update download cache cleanup skipped by default."
 
-    Write-Log "Flushing DNS cache..."
-    if (!$script:EffectiveDryRun) {
-        if ($PSCmdlet.ShouldProcess("DNS client cache", "Flush")) {
-            ipconfig.exe /flushdns | Tee-Object -FilePath $LogFile -Append | Out-Null
-            Write-Log "ipconfig.exe exit code: $LASTEXITCODE"
-        }
-    }
+    Write-Log "DNS refresh skipped. Use Network First Aid > Refresh Website Addresses to run it explicitly."
+    Add-ReportNote -Message "DNS refresh is not run automatically. Use Network First Aid > Refresh Website Addresses if needed."
 
-    Write-Log "Running DISM component cleanup..."
-    if (!$script:EffectiveDryRun) {
+    if (!(Test-Admin)) {
+        Write-Log "Skipping DISM component cleanup because Administrator access is required."
+        Add-ReportNote -Message "DISM component cleanup skipped because Administrator access is required."
+    }
+    else {
+        Write-Log "Running DISM component cleanup..."
+    }
+    if (!$script:EffectiveDryRun -and (Test-Admin)) {
         if ($PSCmdlet.ShouldProcess("Windows component store", "Run DISM component cleanup")) {
             DISM.exe /Online /Cleanup-Image /StartComponentCleanup | Tee-Object -FilePath $LogFile -Append
             Write-Log "DISM.exe exit code: $LASTEXITCODE"
@@ -1409,6 +2095,10 @@ function Invoke-SafeCleanupWorkflow {
 
     if ($SkipSFC) {
         Write-Log "Skipping system file integrity scan. Use -SkipSFC:`$false to run SFC."
+    }
+    elseif (!(Test-Admin)) {
+        Write-Log "Skipping system file integrity scan because Administrator access is required."
+        Add-ReportNote -Message "SFC system file scan skipped because Administrator access is required."
     }
     else {
         Write-Log "Running system file integrity scan..."
@@ -1440,6 +2130,8 @@ function Initialize-CleanupRun {
     Write-Log "Log file: $LogFile"
     Write-Log "License mode: $($LicenseInfo.Mode)"
     Write-Log "License source: $($LicenseInfo.Source)"
+    Write-Log "GUI process elevated: $GuiElevated"
+    Write-Log "PowerShell/engine process elevated: $(if (Test-Admin) { 'Yes' } else { 'No' })"
 }
 
 function Invoke-CleanupRun {
@@ -1479,17 +2171,30 @@ function Invoke-CleanupRun {
     $isWindowsPlatform = Test-WindowsPlatform
     if (!$isWindowsPlatform) {
         Write-Log "INFO: This tool is intended for Windows. Validation mode passed."
-        Add-ReportNote -Message "Cleanup category measurement skipped because this validation run is not on Windows."
+        Add-ReportNote -Message "Windows-only checks were skipped because this validation run is not on Windows."
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
+    if ($RunMode -eq "BrowserHealth") {
+        Get-BrowserHealth | Out-Null
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
+    if ($RunMode -eq "NetworkHealth") {
+        Get-NetworkHealth | Out-Null
         Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
         return
     }
 
     if ($WhatIfPreference) {
-        Write-Log "WhatIf validation mode detected. Administrator enforcement skipped for validation."
+        Write-Log "WhatIf validation mode detected."
     }
-    elseif (!(Test-Admin)) {
-        Write-Log "ERROR: Please run PowerShell as Administrator."
-        Write-Host "`nRight-click PowerShell and choose 'Run as Administrator'." -ForegroundColor Yellow
+    elseif ((Test-RunModeRequiresAdmin -RunMode $RunMode) -and !(Test-Admin)) {
+        Write-Log "ERROR: Administrator access is required for $RunMode."
+        Add-ReportNote -Message "Administrator access is required for this action."
+        Write-Host "`nAdministrator Required: This action requires Administrator access." -ForegroundColor Yellow
         Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
         if ($InteractiveMode -and !$NoMenu) {
             Read-Host "Press Enter to exit"
@@ -1497,7 +2202,25 @@ function Invoke-CleanupRun {
         return
     }
     else {
-        Write-Log "Admin rights confirmed."
+        Write-Log "Admin requirement check passed for $RunMode."
+    }
+
+    if ($RunMode -eq "FlushDns") {
+        Invoke-FlushDnsFirstAid | Out-Null
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
+    if ($RunMode -eq "RenewIp") {
+        Invoke-RenewIpFirstAid | Out-Null
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
+    }
+
+    if ($RunMode -eq "ResetNetwork") {
+        Invoke-ResetNetworkFirstAid | Out-Null
+        Write-Summary -LicenseMode $LicenseInfo.Mode -StartTime $StartTime -EstimatedCleanupTargets 0
+        return
     }
 
     if ($RunMode -eq "Preview") {
@@ -1532,6 +2255,21 @@ function Start-BayouFindsCleanupTool {
             }
             "BackupBookmarks" {
                 $runMode = "BackupBookmarks"
+            }
+            "BrowserHealth" {
+                $runMode = "BrowserHealth"
+            }
+            "NetworkHealth" {
+                $runMode = "NetworkHealth"
+            }
+            "FlushDns" {
+                $runMode = "FlushDns"
+            }
+            "RenewIp" {
+                $runMode = "RenewIp"
+            }
+            "ResetNetwork" {
+                $runMode = "ResetNetwork"
             }
             "Exit" {
                 Write-Host "Exiting BayouFinds Windows Cleanup Tool."

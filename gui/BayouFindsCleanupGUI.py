@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
+import ctypes
 from datetime import datetime
 from math import ceil
 from pathlib import Path
@@ -69,6 +70,13 @@ PRIMARY_DARK = ACCENT_DARK
 SUCCESS = "#6aa38d"
 WARNING = "#d2a15c"
 ERROR = "#c86f6f"
+
+
+ADMIN_ONLY_ACTIONS = {
+    "Deep Windows Check",
+    "Repair Windows Files",
+    "Repair Windows Networking",
+}
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -194,6 +202,7 @@ class BayouFindsCleanupGUI:
         self.current_process: subprocess.Popen[str] | None = None
         self.current_action_name: str | None = None
         self.last_license_mode: str | None = None
+        self.gui_elevated = self._is_gui_elevated()
         self.license_state = "required"
         self.run_output_lines: list[str] = []
         self.run_started_at: float | None = None
@@ -209,6 +218,20 @@ class BayouFindsCleanupGUI:
         self._build_layout()
         self.refresh_license_state()
         self._poll_output_queue()
+
+    def _is_gui_elevated(self) -> bool:
+        if os.name != "nt":
+            return False
+
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+
+    def _gui_elevated_text(self) -> str:
+        if os.name != "nt":
+            return "Unknown"
+        return "Yes" if self.gui_elevated else "No"
 
     def _get_base_dir(self) -> Path:
         if getattr(sys, "frozen", False):
@@ -425,6 +448,7 @@ class BayouFindsCleanupGUI:
         nav_items = [
             ("Home", lambda: self._set_view("Home")),
             ("Scan", lambda: self._set_view("Scan")),
+            ("Network Health", lambda: self._set_view("Network Health")),
             ("Cleanup", lambda: self._set_view("Cleanup")),
             ("Reports", lambda: self._set_view("Reports")),
             ("License", lambda: self._set_view("License")),
@@ -751,6 +775,7 @@ class BayouFindsCleanupGUI:
         subtitles = {
             "Home": "Scan your PC to find and safely remove unnecessary files.",
             "Scan": "Run a safe scan to estimate recoverable space before cleanup.",
+            "Network Health": "Check your IP address, connection, router, and website reachability.",
             "Cleanup": "Safe Cleanup unlocks when an active license is installed.",
             "Reports": "Open reports, logs, and technical details when you need them.",
             "License": "Activate cleanup when you are ready to recover space.",
@@ -777,7 +802,20 @@ class BayouFindsCleanupGUI:
             )
             self.action_status_label.configure(text="Status: Ready to scan", text_color=ACCENT)
             self._add_page_button("Scan My PC", self.scan_my_pc, PRIMARY, PRIMARY_DARK, TEXT)
+            self._add_page_button("Browser Health", self.browser_health, ACCENT_DARK, ACCENT, TEXT)
             self._set_result_banner("Scan Results", TEXT)
+        elif view_name == "Network Health":
+            self.action_title_label.configure(text="Network Health")
+            self.action_body_label.configure(
+                text="Check your IP address, router, DNS, connection type, and website reachability. Repair actions run only when you choose them."
+            )
+            self.action_status_label.configure(text="Status: Ready to check", text_color=ACCENT)
+            self._add_page_button("Network Health", self.network_health, PRIMARY, PRIMARY_DARK, TEXT)
+            self._add_page_button("Refresh Website Addresses", self.refresh_website_addresses, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("Get New Network Address", self.get_new_network_address, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("Repair Windows Networking", self.repair_windows_networking, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("Copy Network Report", self.copy_network_report, ACCENT_DARK, ACCENT, TEXT)
+            self._set_result_banner("Network Health", TEXT)
         elif view_name == "Cleanup":
             self.action_title_label.configure(text="Run Safe Cleanup")
             self.action_body_label.configure(
@@ -1040,6 +1078,73 @@ class BayouFindsCleanupGUI:
             command=prompt.destroy,
         ).pack(side=RIGHT)
 
+    def _show_admin_required_prompt(self) -> None:
+        prompt = Toplevel(self.root)
+        prompt.title("Administrator Required")
+        prompt.geometry("460x210")
+        prompt.configure(bg=BG)
+        prompt.resizable(False, False)
+        prompt.transient(self.root)
+        prompt.grab_set()
+
+        frame = ttk.Frame(prompt, padding=22)
+        frame.pack(fill=BOTH, expand=True)
+        ttk.Label(frame, text="Administrator Required", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            frame,
+            text="This action requires Administrator access.",
+            style="TLabel",
+            wraplength=400,
+        ).pack(anchor="w", pady=(12, 22))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill=X)
+        ttk.Button(
+            buttons,
+            text="Restart as Administrator",
+            style="Action.TButton",
+            command=lambda: (prompt.destroy(), self.restart_as_administrator()),
+        ).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(
+            buttons,
+            text="Cancel",
+            style="Secondary.TButton",
+            command=prompt.destroy,
+        ).pack(side=RIGHT)
+
+    def restart_as_administrator(self) -> None:
+        if os.name != "nt":
+            messagebox.showinfo(WINDOW_TITLE, "Administrator restart is available on Windows.")
+            return
+
+        if getattr(sys, "frozen", False):
+            executable = sys.executable
+            parameters = " ".join(f'"{arg}"' for arg in sys.argv[1:])
+        else:
+            executable = sys.executable
+            script = Path(__file__).resolve()
+            parameters = " ".join([f'"{script}"', *[f'"{arg}"' for arg in sys.argv[1:]]])
+
+        try:
+            result = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, parameters, None, 1)
+        except Exception as exc:
+            messagebox.showerror(WINDOW_TITLE, f"Could not restart as Administrator.\n\n{exc}")
+            return
+
+        if int(result) <= 32:
+            messagebox.showerror(WINDOW_TITLE, "Could not restart as Administrator.")
+            return
+
+        self.root.destroy()
+
+    def _ensure_admin_for_action(self, action_name: str) -> bool:
+        self.gui_elevated = self._is_gui_elevated()
+        if action_name not in ADMIN_ONLY_ACTIONS or self.gui_elevated:
+            return True
+
+        self._show_admin_required_prompt()
+        return False
+
     def import_license(self) -> None:
         selected = filedialog.askopenfilename(
             title="Select BayouFinds license.json",
@@ -1100,7 +1205,7 @@ class BayouFindsCleanupGUI:
 
         if not messagebox.askyesno(
             "Run Safe Cleanup",
-            "Run safe cleanup now?\n\nThis cleans safe temporary files and app caches only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, or Downloads."
+            "Run safe cleanup now?\n\nThis cleans safe temporary files and approved app caches only.\nIt will not delete your Documents, Pictures, Desktop, Videos, Music, Downloads, browser passwords, cookies, history, or browser data."
         ):
             return
         self.run_cleanup("Run Safe Cleanup", ["-NoMenu", "-Mode", "SafeCleanup"])
@@ -1108,6 +1213,8 @@ class BayouFindsCleanupGUI:
     def deep_cleanup(self) -> None:
         if not self._has_active_license():
             self._show_license_required_prompt()
+            return
+        if not self._ensure_admin_for_action("Deep Windows Check"):
             return
 
         if not messagebox.askyesno(
@@ -1121,9 +1228,65 @@ class BayouFindsCleanupGUI:
         self._set_active_nav("Scan")
         self.run_cleanup("Scan My PC", ["-NoMenu", "-Mode", "Preview"])
 
+    def browser_health(self) -> None:
+        self._set_active_nav("Scan")
+        self.run_cleanup("Browser Health", ["-NoMenu", "-Mode", "BrowserHealth"])
+
+    def network_health(self) -> None:
+        self._set_active_nav("Network Health")
+        self.run_cleanup("Network Health", ["-NoMenu", "-Mode", "NetworkHealth"])
+
+    def refresh_website_addresses(self) -> None:
+        self._set_active_nav("Network Health")
+        if not messagebox.askyesno(
+            "Refresh Website Addresses",
+            "Refresh Website Addresses clears Windows saved website lookup results.\n\nThis can help when websites do not open after a router, modem, or DNS change.\n\nRun this repair now?",
+        ):
+            return
+        self.run_cleanup("Refresh Website Addresses", ["-NoMenu", "-Mode", "FlushDns"])
+
+    def get_new_network_address(self) -> None:
+        self._set_active_nav("Network Health")
+        if not messagebox.askyesno(
+            "Get New Network Address",
+            "Get New Network Address asks your router for a network address again.\n\nYour connection may briefly reconnect. Your router may assign the same address again, which is normal.\n\nRun this repair now?",
+        ):
+            return
+        self.run_cleanup("Get New Network Address", ["-NoMenu", "-Mode", "RenewIp"])
+
+    def repair_windows_networking(self) -> None:
+        self._set_active_nav("Network Health")
+        if not self._ensure_admin_for_action("Repair Windows Networking"):
+            return
+        if not messagebox.askyesno(
+            "Repair Windows Networking",
+            "Repair Windows Networking resets Winsock and the Windows IP network stack.\n\nA restart may be needed after this repair. It does not remove adapters, drivers, VPN clients, printers, or startup entries.\n\nRun this repair now?",
+        ):
+            return
+        self.run_cleanup("Repair Windows Networking", ["-NoMenu", "-Mode", "ResetNetwork"])
+
+    def copy_network_report(self) -> None:
+        report = self._load_latest_json_report() or {}
+        network = report.get("NetworkHealth") or {}
+        first_aid = report.get("NetworkFirstAid") or []
+        if not network and not first_aid:
+            messagebox.showinfo(
+                WINDOW_TITLE,
+                "No network report was found yet.\n\nClick Network Health first, then use Copy Network Report.",
+            )
+            return
+
+        text = self._format_network_report_for_clipboard(network, first_aid)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._set_result_banner("Network report copied", SUCCESS)
+        self._append_output("\nNetwork report copied to the clipboard.\n")
+
     def repair_windows_files(self) -> None:
         if not self._has_active_license():
             self._show_license_required_prompt()
+            return
+        if not self._ensure_admin_for_action("Repair Windows Files"):
             return
 
         self.run_cleanup("Repair Windows Files", ["-NoMenu", "-Mode", "SafeCleanup", "-SkipSFC:$false"])
@@ -1135,6 +1298,8 @@ class BayouFindsCleanupGUI:
     def run_cleanup(self, action_name: str, args: list[str]) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
             messagebox.showinfo(WINDOW_TITLE, "Another action is already running.")
+            return
+        if not self._ensure_admin_for_action(action_name):
             return
 
         if not self.script_path.exists():
@@ -1152,7 +1317,8 @@ class BayouFindsCleanupGUI:
         self._update_dashboard_for_start(action_name)
         self._clear_output()
         self._append_output(f"{action_name} is running...\n\n")
-        self._append_output("This panel will show a cleanup breakdown when the task finishes.\n")
+        self._append_output(f"GUI process elevated: {self._gui_elevated_text()}\n")
+        self._append_output("This panel will show a plain-English breakdown when the task finishes.\n")
         self._append_output(f"Reports folder: {self.log_folder}\n\n")
 
         self.worker_thread = threading.Thread(
@@ -1208,7 +1374,7 @@ class BayouFindsCleanupGUI:
         if os.name == "nt":
             command.extend(["-WindowStyle", "Hidden"])
 
-        command.extend(["-File", str(self.script_path), *args])
+        command.extend(["-File", str(self.script_path), "-GuiElevated", self._gui_elevated_text(), *args])
         return command
 
     def _creation_flags(self) -> int:
@@ -1281,6 +1447,11 @@ class BayouFindsCleanupGUI:
             self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
             self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
             self._configure_text(self.top_hogs_label, "Scanning for largest contributors...", MUTED)
+        elif action_name in {"Browser Health", "Network Health"}:
+            self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
+            self._set_dashboard_value(self.recommendation_value_label, "Review the report when finished", TEXT)
+        elif action_name in {"Refresh Website Addresses", "Get New Network Address", "Repair Windows Networking"}:
+            self._set_dashboard_value(self.recommendation_value_label, "Network repair running", ACCENT)
         elif action_name == "Run Safe Cleanup":
             self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
             self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
@@ -1303,6 +1474,18 @@ class BayouFindsCleanupGUI:
             else:
                 self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
                 self._set_dashboard_value(self.recommendation_value_label, "Open the report before cleanup", WARNING)
+        elif action_name in {"Browser Health", "Network Health"}:
+            if exit_code == 0:
+                self._set_dashboard_value(self.last_scan_value_label, f"Completed at {now}", SUCCESS)
+                self._set_dashboard_value(self.recommendation_value_label, "Review the health report", TEXT)
+            else:
+                self._set_dashboard_value(self.last_scan_value_label, "Needs attention", ERROR)
+                self._set_dashboard_value(self.recommendation_value_label, "Open the report", WARNING)
+        elif action_name in {"Refresh Website Addresses", "Get New Network Address", "Repair Windows Networking"}:
+            if exit_code == 0:
+                self._set_dashboard_value(self.recommendation_value_label, "Network First Aid complete", SUCCESS)
+            else:
+                self._set_dashboard_value(self.recommendation_value_label, "Review Network First Aid report", WARNING)
         elif action_name == "Run Safe Cleanup":
             if exit_code == 0:
                 self._set_dashboard_value(self.recommendation_value_label, "Cleanup complete", SUCCESS)
@@ -1326,6 +1509,15 @@ class BayouFindsCleanupGUI:
         if report:
             if report.get("RunMode") == "LicenseCheck":
                 self._append_output(self._format_license_breakdown(report, exit_code))
+                return
+            if report.get("RunMode") == "BrowserHealth":
+                self._append_output(self._format_browser_health_breakdown(report, exit_code))
+                return
+            if report.get("RunMode") == "NetworkHealth":
+                self._append_output(self._format_network_health_breakdown(report, exit_code))
+                return
+            if report.get("RunMode") in {"FlushDns", "RenewIp", "ResetNetwork"}:
+                self._append_output(self._format_network_first_aid_breakdown(report, exit_code))
                 return
             self._update_metrics_from_report(report, stats)
             self._append_output(self._format_cleanup_breakdown(report, action_name, exit_code))
@@ -1375,7 +1567,11 @@ class BayouFindsCleanupGUI:
 
         self._set_dashboard_value(self.recoverable_value_label, self._format_bytes(recoverable), TEXT)
         self._set_dashboard_value(self.cleanup_time_value_label, self._cleanup_time_estimate(recoverable), GOLD)
-        self._set_dashboard_value(self.recovered_run_value_label, self._format_bytes(recovered), SUCCESS)
+        if report.get("RunMode") == "Preview":
+            files_identified = sum(int(category.get("EstimatedFiles") or 0) for category in categories if isinstance(category, dict))
+            self._set_dashboard_value(self.recovered_run_value_label, f"{files_identified} items found", SUCCESS)
+        else:
+            self._set_dashboard_value(self.recovered_run_value_label, self._format_bytes(recovered), SUCCESS)
         self._set_dashboard_value(self.total_recovered_value_label, self._format_bytes(total_recovered), SUCCESS)
         self._set_dashboard_value(self.health_score_value_label, f"{health_score}/100", self._health_color(health_score))
         self._update_top_hogs(categories)
@@ -1434,7 +1630,12 @@ class BayouFindsCleanupGUI:
         lines.append(f"- Total: {self._format_bytes(total)}")
 
         paths = report.get("Paths") or {}
+        files_identified = sum(int(category.get("EstimatedFiles") or 0) for category in categories if isinstance(category, dict))
         lines.extend([
+            "",
+            f"Items Found: {files_identified}",
+            f"Scan Status: {'Complete' if exit_code == 0 else 'Needs attention'}",
+            f"Report Path: {paths.get('HtmlReport') or 'Saved in reports folder'}",
             "",
             "Protected by Default",
             "Documents, Pictures, Downloads, Desktop, Videos, Music, and browser passwords are not cleaned by default.",
@@ -1518,6 +1719,150 @@ class BayouFindsCleanupGUI:
             "Cleanup dashboard metrics were not changed by this license check.",
             "",
         ])
+
+    def _format_browser_health_breakdown(self, report: dict, exit_code: int) -> str:
+        browsers = report.get("BrowserHealth") or []
+        self._set_result_banner("Browser Health complete", SUCCESS if exit_code == 0 else ERROR)
+        lines = [
+            "Browser Health",
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
+            "",
+            "This scan does not collect passwords, cookies, browsing history, or private browser data.",
+            "",
+        ]
+
+        for browser in browsers:
+            if not isinstance(browser, dict):
+                continue
+            installed = "Installed" if browser.get("Installed") else "Not found"
+            extension_count = browser.get("ExtensionCount")
+            extension_text = "Unknown" if extension_count is None else str(extension_count)
+            lines.extend([
+                f"{browser.get('Name') or 'Browser'}: {installed}",
+                f"- Version: {browser.get('Version') or 'Unknown'}",
+                f"- Default Browser: {browser.get('DefaultBrowser') or 'Unknown'}",
+                f"- Cache Estimate: {browser.get('CacheSize') or 'Unknown'}",
+                f"- Extensions: {extension_text}",
+                f"- Update Status: {browser.get('UpdateStatus') or 'Unknown'}",
+                "",
+            ])
+
+        paths = report.get("Paths") or {}
+        lines.extend([
+            f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+            "",
+        ])
+        return "\n".join(lines)
+
+    def _format_network_health_breakdown(self, report: dict, exit_code: int) -> str:
+        network = report.get("NetworkHealth") or {}
+        self._set_result_banner("Network Health complete", SUCCESS if exit_code == 0 else ERROR)
+        lines = [
+            "Network Health",
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
+            "",
+            f"Your IP Address: {network.get('YourIPAddress') or 'Unknown'}",
+            f"Gateway: {self._join_report_list(network.get('Gateway'))}",
+            f"DNS Servers: {self._join_report_list(network.get('DNSServers'))}",
+            f"Connection Type: {network.get('ConnectionType') or 'Unknown'}",
+            f"Wi-Fi and Ethernet Connected Together: {network.get('WifiAndEthernetConnected')}",
+            f"Internet Reachable: {network.get('InternetReachable') or 'Unknown'}",
+            f"Gateway Reachable: {network.get('GatewayReachable') or 'Unknown'}",
+            "",
+            "Active IPv4 Addresses",
+        ]
+
+        addresses = network.get("ActiveIPv4Addresses") or []
+        if addresses:
+            for item in addresses:
+                if not isinstance(item, dict):
+                    continue
+                primary = " (primary)" if item.get("IsPrimary") else ""
+                lines.append(f"- {item.get('Address') or 'Unknown'}{primary} - {item.get('ConnectionType') or 'Unknown'}")
+        else:
+            lines.append("- Unknown")
+
+        vpn_adapters = network.get("VPNAdaptersDetected") or []
+        lines.append("")
+        if vpn_adapters:
+            lines.append("VPN Adapters Detected")
+            for adapter in vpn_adapters:
+                if isinstance(adapter, dict):
+                    lines.append(f"- {adapter.get('Name') or 'Unknown'}")
+        else:
+            lines.append("VPN Adapters Detected: None obvious")
+
+        paths = report.get("Paths") or {}
+        lines.extend([
+            "",
+            f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+            "",
+        ])
+        return "\n".join(lines)
+
+    def _format_network_first_aid_breakdown(self, report: dict, exit_code: int) -> str:
+        results = report.get("NetworkFirstAid") or []
+        self._set_result_banner("Network First Aid complete", SUCCESS if exit_code == 0 else ERROR)
+        lines = [
+            "Network First Aid",
+            f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
+            "",
+        ]
+
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            lines.extend([
+                f"Action: {result.get('Action') or 'Network repair'}",
+                f"Result: {result.get('Status') or 'Unknown'}",
+                f"Message: {result.get('Message') or 'Finished'}",
+                f"Previous IP Address: {result.get('PreviousIPv4') or 'Unknown'}",
+                f"Current IP Address: {result.get('CurrentIPv4') or 'Unknown'}",
+                f"Gateway: {self._join_report_list(result.get('Gateway'))}",
+                f"DNS Servers: {self._join_report_list(result.get('DNSServers'))}",
+                "",
+            ])
+
+        paths = report.get("Paths") or {}
+        lines.extend([
+            f"Report: {paths.get('HtmlReport') or 'Saved in reports folder'}",
+            "",
+        ])
+        return "\n".join(lines)
+
+    def _format_network_report_for_clipboard(self, network: dict, first_aid: list) -> str:
+        lines = [
+            "BayouFinds Network Report",
+            "",
+            f"Your IP Address: {network.get('YourIPAddress') or 'Unknown'}",
+            f"Gateway: {self._join_report_list(network.get('Gateway'))}",
+            f"DNS Servers: {self._join_report_list(network.get('DNSServers'))}",
+            f"Connection Type: {network.get('ConnectionType') or 'Unknown'}",
+            f"Internet Reachable: {network.get('InternetReachable') or 'Unknown'}",
+            f"Gateway Reachable: {network.get('GatewayReachable') or 'Unknown'}",
+            "",
+            "Active IPv4 Addresses:",
+        ]
+        for item in network.get("ActiveIPv4Addresses") or []:
+            if isinstance(item, dict):
+                primary = " primary" if item.get("IsPrimary") else ""
+                lines.append(f"- {item.get('Address') or 'Unknown'}{primary}")
+
+        if first_aid:
+            lines.extend(["", "Network First Aid:"])
+            for result in first_aid:
+                if isinstance(result, dict):
+                    lines.append(f"- {result.get('Action') or 'Action'}: {result.get('Status') or 'Unknown'} - {result.get('Message') or ''}")
+
+        return "\n".join(lines)
+
+    def _join_report_list(self, value) -> str:
+        if not value:
+            return "Unknown"
+        if isinstance(value, list):
+            items = [str(item) for item in value if str(item).strip()]
+            return ", ".join(items) if items else "Unknown"
+        return str(value)
 
     def _group_cleanup_categories(self, categories: list) -> dict[str, dict]:
         grouped = {
