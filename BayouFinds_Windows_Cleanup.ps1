@@ -270,6 +270,63 @@ function Write-CleanupJsonReport {
     Write-Log "JSON report saved: $JsonReport"
 }
 
+function Format-ReportBytes {
+    param([int64]$Bytes)
+
+    $safeBytes = [Math]::Max(0, $Bytes)
+    $units = @("B", "KB", "MB", "GB", "TB")
+    $amount = [double]$safeBytes
+    $unitIndex = 0
+
+    while ($amount -ge 1024 -and $unitIndex -lt ($units.Count - 1)) {
+        $amount = $amount / 1024
+        $unitIndex++
+    }
+
+    if ($unitIndex -eq 0) {
+        return "$([int64]$amount) $($units[$unitIndex])"
+    }
+
+    return "{0:N1} {1}" -f $amount, $units[$unitIndex]
+}
+
+function Get-ReportFilesIdentified {
+    if (!$script:CleanupReport -or !$script:CleanupReport.CleanupCategories) {
+        return 0L
+    }
+
+    $files = 0L
+    foreach ($category in $script:CleanupReport.CleanupCategories) {
+        if ($null -ne $category.EstimatedFiles) {
+            $files += [int64]$category.EstimatedFiles
+        }
+    }
+
+    return $files
+}
+
+function Get-ReportCleanupStatus {
+    param([string]$RunMode)
+
+    if ($RunMode -eq "SafeCleanup" -and !$script:EffectiveDryRun -and !$WhatIfPreference) {
+        return "Cleanup completed"
+    }
+
+    if ($RunMode -eq "Preview") {
+        return "Assessment complete - cleanup actions unlock after activation"
+    }
+
+    if ($RunMode -eq "LicenseCheck") {
+        return "Activation status checked"
+    }
+
+    if ($RunMode -eq "BackupBookmarks") {
+        return "Bookmark backup completed"
+    }
+
+    return "Report generated"
+}
+
 function Write-HtmlReport {
     param(
         [string]$LicenseMode,
@@ -285,6 +342,11 @@ function Write-HtmlReport {
     $recoveredBytes = if ($statistics) { $statistics.RecoveredBytes } else { 0 }
     $totalRecoveredBytes = if ($statistics) { $statistics.TotalRecoveredBytes } else { 0 }
     $pcHealthScore = if ($statistics) { $statistics.PCHealthScore } else { 100 }
+    $filesIdentified = Get-ReportFilesIdentified
+    $categoriesScanned = if ($script:CleanupReport -and $script:CleanupReport.CleanupCategories) { $script:CleanupReport.CleanupCategories.Count } else { $EstimatedCleanupTargets }
+    $reportRunMode = if ($script:CleanupReport) { $script:CleanupReport.RunMode } else { $null }
+    $cleanupStatus = Get-ReportCleanupStatus -RunMode $reportRunMode
+    $potentialRecovery = Format-ReportBytes -Bytes $recoverableBytes
 
     $html = @"
 <!doctype html>
@@ -297,6 +359,10 @@ body { font-family: Arial, sans-serif; margin: 32px; background: #f6f7f9; color:
 .card { background: white; border-radius: 12px; padding: 24px; max-width: 900px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
 h1 { margin-top: 0; }
 .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #e8f0fe; }
+.summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.summary-item { background: #f2f4f5; border-left: 4px solid #5d8892; border-radius: 8px; padding: 14px; }
+.summary-label { color: #555; font-size: 12px; font-weight: bold; text-transform: uppercase; }
+.summary-value { color: #15181c; font-size: 18px; font-weight: bold; margin-top: 4px; }
 table { border-collapse: collapse; width: 100%; margin-top: 16px; }
 td { border-bottom: 1px solid #ddd; padding: 10px; }
 .footer { margin-top: 24px; font-size: 12px; color: #666; }
@@ -307,6 +373,13 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <h1>BayouFinds Windows Cleanup Report</h1>
 <p class="badge">$LicenseMode</p>
 
+<div class="summary">
+<div class="summary-item"><div class="summary-label">Potential Recovery</div><div class="summary-value">$potentialRecovery</div></div>
+<div class="summary-item"><div class="summary-label">Files Identified</div><div class="summary-value">$filesIdentified</div></div>
+<div class="summary-item"><div class="summary-label">Categories Scanned</div><div class="summary-value">$categoriesScanned</div></div>
+<div class="summary-item"><div class="summary-label">Cleanup Status</div><div class="summary-value">$cleanupStatus</div></div>
+</div>
+
 <table>
 <tr><td><strong>Tool Version</strong></td><td>$ToolVersion</td></tr>
 <tr><td><strong>Session ID</strong></td><td>$SessionId</td></tr>
@@ -315,7 +388,7 @@ td { border-bottom: 1px solid #ddd; padding: 10px; }
 <tr><td><strong>Started</strong></td><td>$($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Ended</strong></td><td>$($endTime.ToString('yyyy-MM-dd HH:mm:ss'))</td></tr>
 <tr><td><strong>Estimated Cleanup Targets</strong></td><td>$EstimatedCleanupTargets</td></tr>
-<tr><td><strong>Recoverable Space</strong></td><td>$recoverableBytes bytes</td></tr>
+<tr><td><strong>Potential Recovery</strong></td><td>$recoverableBytes bytes</td></tr>
 <tr><td><strong>Recovered This Run</strong></td><td>$recoveredBytes bytes</td></tr>
 <tr><td><strong>Total Recovered</strong></td><td>$totalRecoveredBytes bytes</td></tr>
 <tr><td><strong>PC Health Score</strong></td><td>$pcHealthScore / 100</td></tr>

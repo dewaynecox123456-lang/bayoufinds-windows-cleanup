@@ -33,20 +33,22 @@ WINDOW_WIDTH = 1180
 WINDOW_HEIGHT = 700
 WINDOW_SIZE = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
 
-BG = "#071b1d"
-SIDEBAR = "#0a2528"
-CARD = "#103338"
-CARD_SOFT = "#143d42"
-CARD_BORDER = "#2d6f70"
-RESULT_BG = "#0a2428"
-TEXT = "#f5fbf8"
-MUTED = "#a8c7c2"
-ACCENT = "#6fdad0"
-PRIMARY = "#77e0a5"
-PRIMARY_DARK = "#4bbf7c"
-SUCCESS = "#7ee7a6"
-WARNING = "#f1c96b"
-ERROR = "#ff7c7c"
+BG = "#15181c"
+SIDEBAR = "#1b1f24"
+CARD = "#242a31"
+CARD_SOFT = "#2b323a"
+CARD_BORDER = "#3a434d"
+RESULT_BG = "#1b1f24"
+TEXT = "#f2f4f5"
+MUTED = "#b8bec5"
+ACCENT = "#5d8892"
+ACCENT_DARK = "#476b73"
+GOLD = "#c6a15b"
+PRIMARY = ACCENT
+PRIMARY_DARK = ACCENT_DARK
+SUCCESS = "#6aa38d"
+WARNING = "#d2a15c"
+ERROR = "#c86f6f"
 
 
 def find_asset_path(filename: str, base_dir: Path | None = None) -> Path | None:
@@ -166,8 +168,8 @@ class BayouFindsCleanupCTk:
         parent,
         text: str,
         command,
-        fg_color: str = "#173f44",
-        hover_color: str = "#22595e",
+        fg_color: str = ACCENT_DARK,
+        hover_color: str = ACCENT,
         text_color: str = TEXT,
         height: int = 40,
         requires_license: bool = False,
@@ -179,7 +181,7 @@ class BayouFindsCleanupCTk:
             fg_color=fg_color,
             hover_color=hover_color,
             text_color=text_color,
-            corner_radius=14,
+            corner_radius=8,
             height=height,
             font=("Segoe UI", 11, "bold"),
         )
@@ -190,7 +192,7 @@ class BayouFindsCleanupCTk:
 
     def _build_layout(self) -> None:
         ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("green")
+        ctk.set_default_color_theme("dark-blue")
 
         self.root.configure(fg_color=BG)
         self.root.grid_columnconfigure(0, minsize=250, weight=0)
@@ -224,17 +226,17 @@ class BayouFindsCleanupCTk:
                 text=label,
                 command=command,
                 fg_color=SIDEBAR,
-                hover_color="#1d6868",
-                text_color="#e8fbf6",
+                hover_color=CARD_SOFT,
+                text_color=TEXT,
                 anchor="w",
-                corner_radius=14,
+                corner_radius=8,
                 height=40,
                 font=("Segoe UI", 11, "bold"),
             )
             button.grid(row=row, column=0, sticky="ew", padx=16, pady=3)
             self.sidebar_buttons[label] = button
 
-        license_panel = self._card(sidebar, "#11373b", 18)
+        license_panel = self._card(sidebar, CARD, 18)
         license_panel.grid(row=9, column=0, sticky="ew", padx=16, pady=(6, 6))
         license_panel.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(license_panel, text="License", text_color=MUTED, font=("Segoe UI", 10, "bold"), anchor="w").grid(
@@ -242,7 +244,7 @@ class BayouFindsCleanupCTk:
         )
         self.license_value_label = ctk.CTkLabel(
             license_panel,
-            text="LICENSE REQUIRED",
+            text="ACTIVATION REQUIRED",
             text_color=ERROR,
             font=("Segoe UI", 13, "bold"),
             anchor="w",
@@ -250,21 +252,21 @@ class BayouFindsCleanupCTk:
         self.license_value_label.grid(row=1, column=0, sticky="ew", padx=14, pady=(2, 0))
         ctk.CTkLabel(
             license_panel,
-            text="Trial mode: scan and reports only",
+            text="Assessment Mode\n\nScan your PC and generate recovery reports.\n\nCleanup actions unlock after activation.",
             text_color=MUTED,
             font=("Segoe UI", 9),
             anchor="w",
             wraplength=190,
         ).grid(row=2, column=0, sticky="ew", padx=14, pady=(4, 12))
 
-        self._button(sidebar, "🛒 Purchase License", self.purchase_license, height=38).grid(
+        self._button(sidebar, "Activate Cleanup", self.purchase_license, height=38).grid(
             row=10, column=0, sticky="ew", padx=16, pady=(3, 3)
         )
         self._button(sidebar, "Import License", self.import_license, height=38).grid(
             row=11, column=0, sticky="ew", padx=16, pady=(3, 6)
         )
 
-        reminder = self._card(sidebar, "#0f3034", 18)
+        reminder = self._card(sidebar, CARD_SOFT, 18)
         reminder.grid(row=12, column=0, sticky="ew", padx=16, pady=(0, 14))
         ctk.CTkLabel(reminder, text="Protected by Default", text_color=SUCCESS, font=("Segoe UI", 10, "bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=14, pady=(12, 0)
@@ -314,7 +316,7 @@ class BayouFindsCleanupCTk:
             header,
             text=APP_VERSION,
             text_color=ACCENT,
-            fg_color="#11373b",
+            fg_color=CARD_SOFT,
             corner_radius=14,
             width=92,
             height=34,
@@ -324,32 +326,33 @@ class BayouFindsCleanupCTk:
     def _build_metrics(self) -> None:
         metrics = ctk.CTkFrame(self.main, fg_color=BG)
         metrics.grid(row=1, column=0, sticky="ew", pady=(0, 16))
-        for column in range(4):
+        for column in range(5):
             metrics.grid_columnconfigure(column, weight=1, uniform="metrics")
-        self.recoverable_value_label = self._metric_card(metrics, 0, "Recoverable Space", "Not scanned yet")
-        self.recovered_run_value_label = self._metric_card(metrics, 1, "Recovered This Run", "Not run yet")
-        self.total_recovered_value_label = self._metric_card(metrics, 2, "Total Recovered", "No cleanup yet")
-        self.health_score_value_label = self._metric_card(metrics, 3, "PC Health Score", "Not scanned yet")
+        self.recoverable_value_label = self._metric_card(metrics, 0, "Potential Recovery", "Not scanned yet")
+        self.cleanup_time_value_label = self._metric_card(metrics, 1, "Estimated Cleanup Time", "Not scanned yet")
+        self.recovered_run_value_label = self._metric_card(metrics, 2, "Recovered This Run", "Not run yet")
+        self.total_recovered_value_label = self._metric_card(metrics, 3, "Total Recovered", "No cleanup yet")
+        self.health_score_value_label = self._metric_card(metrics, 4, "PC Health Score", "Not scanned yet")
 
     def _metric_card(self, parent, column: int, title: str, value: str) -> ctk.CTkLabel:
         card = self._card(parent, CARD, 20)
-        card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0 if column == 3 else 8))
+        card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0 if column == 4 else 8))
         card.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(card, text=title, text_color=MUTED, font=("Segoe UI", 10, "bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=18, pady=(18, 4)
         )
-        value_label = ctk.CTkLabel(card, text=value, text_color=TEXT, font=("Segoe UI", 17, "bold"), anchor="w")
+        value_label = ctk.CTkLabel(card, text=value, text_color=TEXT, font=("Segoe UI", 15, "bold"), anchor="w")
         value_label.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
         return value_label
 
     def _build_status_bar(self) -> None:
-        status = self._card(self.main, "#0f3034", 20)
+        status = self._card(self.main, CARD_SOFT, 20)
         status.grid(row=2, column=0, sticky="ew", pady=(0, 16))
         for column in range(3):
             status.grid_columnconfigure(column, weight=1, uniform="status")
         self.last_scan_value_label = self._status_item(status, 0, "Last Scan", "Not scanned yet")
         self.recommendation_value_label = self._status_item(status, 1, "Recommendation", "Run a scan to see results")
-        self.status_license_value_label = self._status_item(status, 2, "License Status", "License Required", ERROR)
+        self.status_license_value_label = self._status_item(status, 2, "Activation Status", "Activation Required", ERROR)
 
     def _status_item(self, parent, column: int, title: str, value: str, color: str = TEXT) -> ctk.CTkLabel:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -384,27 +387,32 @@ class BayouFindsCleanupCTk:
         self.action_status_label = ctk.CTkLabel(
             self.action_card,
             text="Status: Ready",
-            text_color=SUCCESS,
+            text_color=GOLD,
             font=("Segoe UI", 12, "bold"),
             anchor="w",
         )
         self.action_status_label.grid(row=2, column=0, sticky="ew", padx=22, pady=(0, 12))
         self.action_buttons_frame = ctk.CTkFrame(self.action_card, fg_color="transparent")
 
-        protected = self._card(middle, CARD, 22)
-        protected.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-        protected.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkLabel(protected, text="Protected by Default", text_color=SUCCESS, font=("Segoe UI", 16, "bold"), anchor="w").grid(
-            row=0, column=0, columnspan=2, sticky="ew", padx=22, pady=(22, 10)
+        top_hogs = self._card(middle, CARD, 22)
+        top_hogs.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        top_hogs.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(top_hogs, text="Top Space Hogs", text_color=GOLD, font=("Segoe UI", 16, "bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=22, pady=(22, 6)
         )
-        protected_items = ["Documents", "Pictures", "Downloads", "Desktop", "Videos", "Music", "Browser Passwords", "Saved Logins"]
-        for index, item in enumerate(protected_items):
-            ctk.CTkLabel(protected, text=f"✓ {item}", text_color=TEXT, font=("Segoe UI", 11, "bold"), anchor="w").grid(
-                row=1 + (index // 2), column=index % 2, sticky="ew", padx=22, pady=3
-            )
+        self.top_hogs_label = ctk.CTkLabel(
+            top_hogs,
+            text="Run a scan to see the largest contributors.",
+            text_color=MUTED,
+            font=("Segoe UI", 12),
+            anchor="w",
+            justify="left",
+            wraplength=360,
+        )
+        self.top_hogs_label.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 22))
 
     def _build_results(self) -> None:
-        results = self._card(self.main, "#0f3034", 22)
+        results = self._card(self.main, CARD_SOFT, 22)
         results.grid(row=4, column=0, sticky="nsew")
         results.grid_columnconfigure(0, weight=1)
         results.grid_rowconfigure(2, weight=1)
@@ -453,7 +461,7 @@ class BayouFindsCleanupCTk:
             "Scan": "Run a safe scan to estimate recoverable space. Scans do not delete files.",
             "Cleanup": "Run Safe Cleanup after activation.",
             "Reports": "Open reports, logs, and technical details.",
-            "License": "Purchase or import a license to unlock cleanup.",
+            "License": "Activate cleanup or import a license to unlock cleanup.",
             "Help": "Safety-first cleanup with personal files protected.",
         }
         self.view_title_label.configure(text=titles.get(page, page))
@@ -468,7 +476,7 @@ class BayouFindsCleanupCTk:
             self.action_title_label.configure(text="Scan My PC")
             self.action_body_label.configure(text="Scan checks safe temporary files and app caches. It does not delete files.")
             self.action_status_label.configure(text="Status: Ready to scan", text_color=ACCENT)
-            self._add_page_button("Scan My PC", self.scan_my_pc, PRIMARY, PRIMARY_DARK, "#082320")
+            self._add_page_button("Scan My PC", self.scan_my_pc, PRIMARY, PRIMARY_DARK, TEXT)
         elif page == "Cleanup":
             self.action_title_label.configure(text="Run Safe Cleanup")
             self.action_body_label.configure(text="Safe Cleanup removes approved temporary files and app caches only.")
@@ -476,21 +484,21 @@ class BayouFindsCleanupCTk:
                 text="Status: Cleanup enabled" if self.license_state == "active" else "Status: Activate license to run cleanup",
                 text_color=SUCCESS if self.license_state == "active" else WARNING,
             )
-            self._add_page_button("Run Safe Cleanup", self.quick_cleanup, "#1f595d", "#28777a", TEXT, requires_license=True)
+            self._add_page_button("Run Safe Cleanup", self.quick_cleanup, ACCENT_DARK, ACCENT, TEXT, requires_license=True)
         elif page == "Reports":
             self.action_title_label.configure(text="Reports")
             self.action_body_label.configure(text="Reports are saved on your Desktop in BayouFinds_Cleanup_Logs.")
             self.action_status_label.configure(text="Status: Reports available after scan", text_color=ACCENT)
-            self._add_page_button("Open Latest Report", self.open_latest_report, "#173f44", "#22595e", TEXT)
-            self._add_page_button("Open Reports / Logs", self.open_log_folder, "#173f44", "#22595e", TEXT)
-            self._add_page_button("View Technical Details", self.view_technical_details, "#173f44", "#22595e", TEXT)
+            self._add_page_button("Open Latest Report", self.open_latest_report, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("Open Reports / Logs", self.open_log_folder, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("View Technical Details", self.view_technical_details, ACCENT_DARK, ACCENT, TEXT)
         elif page == "License":
             self.refresh_license_state()
             self.action_title_label.configure(text="License")
-            self.action_body_label.configure(text="Import your license file or purchase a license to unlock cleanup.")
+            self.action_body_label.configure(text="Activate Cleanup or import your license file to unlock cleanup.")
             self.action_status_label.configure(text=f"Status: {self._license_display_text()}", text_color=self._license_color())
-            self._add_page_button("Import License", self.import_license, "#173f44", "#22595e", TEXT)
-            self._add_page_button("🛒 Purchase License", self.purchase_license, "#173f44", "#22595e", TEXT)
+            self._add_page_button("Activate Cleanup", self.purchase_license, ACCENT_DARK, ACCENT, TEXT)
+            self._add_page_button("Import License", self.import_license, ACCENT_DARK, ACCENT, TEXT)
         elif page == "Help":
             self.action_title_label.configure(text="Help")
             self.action_body_label.configure(text="BayouFinds protects personal folders by default and does not include registry or driver cleanup.")
@@ -533,7 +541,7 @@ class BayouFindsCleanupCTk:
 
     def _set_active_nav(self, label: str) -> None:
         for button_label, button in self.sidebar_buttons.items():
-            button.configure(fg_color="#1d6868" if button_label == label else SIDEBAR)
+            button.configure(fg_color=CARD_SOFT if button_label == label else SIDEBAR)
 
     def _configure_text(self, widget, text: str | None = None, foreground: str | None = None) -> None:
         options = {}
@@ -558,7 +566,7 @@ class BayouFindsCleanupCTk:
             return "Active"
         if self.license_state == "trial":
             return "Trial Mode"
-        return "License Required"
+        return "Activation Required"
 
     def _license_color(self) -> str:
         if self.license_state == "active":
@@ -575,7 +583,7 @@ class BayouFindsCleanupCTk:
             text = "● TRIAL MODE"
             color = WARNING
         else:
-            text = "● LICENSE REQUIRED"
+            text = "● ACTIVATION REQUIRED"
             color = ERROR
 
         if hasattr(self, "license_value_label"):
@@ -592,10 +600,10 @@ class BayouFindsCleanupCTk:
             self._set_dashboard_value(self.recommendation_value_label, "Scan, then run cleanup", TEXT)
         elif state == "trial":
             self._sync_license_labels()
-            self._set_dashboard_value(self.recommendation_value_label, "Purchase a license to clean", WARNING)
+            self._set_dashboard_value(self.recommendation_value_label, "Activate Cleanup to recover space", WARNING)
         else:
             self._sync_license_labels()
-            self._set_dashboard_value(self.recommendation_value_label, "Purchase or import a license", WARNING)
+            self._set_dashboard_value(self.recommendation_value_label, "Activate Cleanup or import a license", WARNING)
 
         self._apply_license_button_state()
         if detail:
@@ -667,7 +675,7 @@ class BayouFindsCleanupCTk:
 
     def _show_license_required_prompt(self) -> None:
         prompt = ctk.CTkToplevel(self.root)
-        prompt.title("License Required")
+        prompt.title("Cleanup Activation Required")
         prompt.geometry("520x260")
         prompt.resizable(False, False)
         prompt.transient(self.root)
@@ -678,12 +686,12 @@ class BayouFindsCleanupCTk:
         frame = self._card(prompt, CARD, 20)
         frame.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
         frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(frame, text="License Required", text_color=ERROR, font=("Segoe UI", 20, "bold"), anchor="w").grid(
+        ctk.CTkLabel(frame, text="Cleanup Activation Required", text_color=ERROR, font=("Segoe UI", 20, "bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=20, pady=(20, 8)
         )
         ctk.CTkLabel(
             frame,
-            text="License Required. Scan and reports are available in trial mode. Activate to clean and recover space.",
+            text="Cleanup Activation Required. Assessment Mode includes scans and recovery reports. Activate Cleanup to recover space.",
             text_color=TEXT,
             font=("Segoe UI", 12),
             justify="left",
@@ -694,13 +702,13 @@ class BayouFindsCleanupCTk:
         buttons = ctk.CTkFrame(frame, fg_color="transparent")
         buttons.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 20))
         buttons.grid_columnconfigure((0, 1, 2), weight=1, uniform="license_prompt")
-        self._button(buttons, "Purchase License", lambda: (prompt.destroy(), self.purchase_license()), PRIMARY, PRIMARY_DARK, "#082320").grid(
+        self._button(buttons, "Activate Cleanup", lambda: (prompt.destroy(), self.purchase_license()), PRIMARY, PRIMARY_DARK, TEXT).grid(
             row=0, column=0, sticky="ew", padx=(0, 6)
         )
         self._button(buttons, "Import License", lambda: (prompt.destroy(), self.import_license())).grid(
             row=0, column=1, sticky="ew", padx=6
         )
-        self._button(buttons, "Not Now", prompt.destroy, "#173f44", "#22595e", TEXT).grid(row=0, column=2, sticky="ew", padx=(6, 0))
+        self._button(buttons, "Not Now", prompt.destroy, ACCENT_DARK, ACCENT, TEXT).grid(row=0, column=2, sticky="ew", padx=(6, 0))
 
     def import_license(self) -> None:
         selected = filedialog.askopenfilename(
@@ -904,8 +912,10 @@ class BayouFindsCleanupCTk:
         if action_name == "Scan My PC":
             self._set_dashboard_value(self.last_scan_value_label, "Running now", ACCENT)
             self._set_dashboard_value(self.recoverable_value_label, "Checking...", ACCENT)
+            self._set_dashboard_value(self.cleanup_time_value_label, "Estimating...", ACCENT)
             self._set_dashboard_value(self.recovered_run_value_label, "Not run yet", MUTED)
             self._set_dashboard_value(self.recommendation_value_label, "Wait for scan results", TEXT)
+            self._configure_text(self.top_hogs_label, "Scanning for largest contributors...", MUTED)
         elif action_name == "Run Safe Cleanup":
             self._set_dashboard_value(self.recovered_run_value_label, "Cleaning...", ACCENT)
             self._set_dashboard_value(self.recommendation_value_label, "Cleaning safe temporary files", TEXT)
@@ -970,6 +980,7 @@ class BayouFindsCleanupCTk:
 
     def _update_metrics_from_report(self, report: dict, stats: dict | None) -> None:
         statistics = report.get("Statistics") or {}
+        categories = report.get("CleanupCategories") or []
         recoverable = int(statistics.get("RecoverableBytes") or 0)
         recovered = int(statistics.get("RecoveredBytes") or 0)
         total_recovered = int(statistics.get("TotalRecoveredBytes") or 0)
@@ -980,9 +991,11 @@ class BayouFindsCleanupCTk:
             health_score = int(stats.get("PCHealthScore") or health_score)
 
         self._set_dashboard_value(self.recoverable_value_label, self._format_bytes(recoverable), TEXT)
+        self._set_dashboard_value(self.cleanup_time_value_label, self._cleanup_time_estimate(recoverable), GOLD)
         self._set_dashboard_value(self.recovered_run_value_label, self._format_bytes(recovered), SUCCESS)
         self._set_dashboard_value(self.total_recovered_value_label, self._format_bytes(total_recovered), SUCCESS)
         self._set_dashboard_value(self.health_score_value_label, f"{health_score}/100", self._health_color(health_score))
+        self._update_top_hogs(categories=report.get("CleanupCategories") or [])
 
     def _format_cleanup_breakdown(self, report: dict, action_name: str | None, exit_code: int) -> str:
         statistics = report.get("Statistics") or {}
@@ -994,7 +1007,7 @@ class BayouFindsCleanupCTk:
         health_score = int(statistics.get("PCHealthScore") or 100)
         is_preview = run_mode == "Preview" or action_name == "Scan My PC"
         banner = (
-            f"Scan Complete — Recoverable Space Found: {self._format_gb(recoverable)}"
+            f"Scan Complete — Potential Recovery: {self._format_gb(recoverable)}"
             if is_preview
             else f"Cleanup Complete — Space Recovered: {self._format_gb(recovered)}"
         )
@@ -1004,10 +1017,14 @@ class BayouFindsCleanupCTk:
             f"Status: {'Completed successfully' if exit_code == 0 else 'Needs attention'}",
             "",
             "Dashboard metrics",
-            f"Recoverable Space: {self._format_bytes(recoverable)}",
+            f"Potential Recovery: {self._format_bytes(recoverable)}",
+            f"Estimated Cleanup Time: {self._cleanup_time_estimate(recoverable)}",
             f"Recovered This Run: {self._format_bytes(recovered)}",
             f"Total Recovered: {self._format_bytes(total_recovered)}",
             f"PC Health Score: {health_score}/100",
+            "",
+            "Top Space Hogs",
+            *self._top_space_hog_lines(categories),
             "",
             "Cleanup breakdown",
         ]
@@ -1049,6 +1066,51 @@ class BayouFindsCleanupCTk:
             ]
         )
         return "\n".join(lines)
+
+    def _update_top_hogs(self, categories: list) -> None:
+        if not hasattr(self, "top_hogs_label"):
+            return
+        lines = self._top_space_hog_lines(categories)
+        text = "\n".join(lines) if lines else "No large contributors found in the latest scan."
+        self._configure_text(self.top_hogs_label, text, TEXT)
+
+    def _top_space_hog_lines(self, categories: list) -> list[str]:
+        hogs = []
+        for category in categories:
+            if not isinstance(category, dict):
+                continue
+            size = int(category.get("EstimatedBytes") or category.get("ActualBytesRemoved") or 0)
+            if size <= 0:
+                continue
+            hogs.append((size, self._space_hog_label(category)))
+
+        hogs.sort(key=lambda item: item[0], reverse=True)
+        return [f"- {label}: {self._format_bytes(size)}" for size, label in hogs[:5]]
+
+    def _space_hog_label(self, category: dict) -> str:
+        category_id = str(category.get("Id") or "").lower()
+        label = str(category.get("Label") or "").strip()
+        combined = f"{category_id} {label.lower()}"
+
+        if "chrome" in combined:
+            return "Chrome Cache"
+        if "edge" in combined:
+            return "Edge Cache"
+        if "recycle" in combined:
+            return "Recycle Bin"
+        if "windows_temp" in combined or label.lower() == "windows temp":
+            return "Windows Temp"
+        if "downloads" in combined:
+            return "Downloads"
+        return label.title() if label else "Cleanup Item"
+
+    def _cleanup_time_estimate(self, recoverable_bytes: int) -> str:
+        one_gb = 1024 ** 3
+        if recoverable_bytes < one_gb:
+            return "Less than 1 minute"
+        if recoverable_bytes <= 5 * one_gb:
+            return "1-2 minutes"
+        return "2-5 minutes"
 
     def _format_license_breakdown(self, report: dict, exit_code: int) -> str:
         license_info = report.get("License") or {}
@@ -1273,7 +1335,7 @@ class BayouFindsCleanupCTk:
 def main() -> None:
     print("Starting BayouFinds Cleanup Assistant CTk GUI...", flush=True)
     ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("green")
+    ctk.set_default_color_theme("dark-blue")
 
     root = ctk.CTk()
     root.title(WINDOW_TITLE)

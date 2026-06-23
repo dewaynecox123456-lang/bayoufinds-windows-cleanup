@@ -16,7 +16,7 @@ Customer setup
    the file came directly from BayouFinds.
 5. If you received a license file, click Import License and select
    license.json.
-6. If you need a license, click Purchase License.
+6. If cleanup is locked, click Activate Cleanup.
 
 Premium dashboard
 -----------------
@@ -32,7 +32,7 @@ BayouFinds opens to a home dashboard with a Mac-style left sidebar:
 
 The home dashboard shows large, simple cards for:
 
-- Recoverable Space
+- Potential Recovery
 - Recovered This Run
 - Total Recovered
 - PC Health
@@ -57,7 +57,7 @@ Trial mode and missing-license mode do not allow:
 - Repair Windows Files
 - Recovery tracking from cleanup runs
 
-The app shows License Required when cleanup is locked. Scan and reports remain
+The app shows Cleanup Activation Required when cleanup is locked. Scan and reports remain
 available so customers can review recoverable space before purchasing.
 
 Paid mode
@@ -79,7 +79,7 @@ Activation
 2. Select your BayouFinds license.json file.
 3. Confirm the dashboard shows Active.
 
-If activation is needed, click Purchase License:
+If activation is needed, click Activate Cleanup:
 
   https://bayoufinds.com/b/y3OJr
 
@@ -101,7 +101,7 @@ Dashboard metrics
 
 The top dashboard cards show:
 
-- Recoverable Space
+- Potential Recovery
   Space found during Scan My PC. Preview mode does not delete files.
 
 - Recovered This Run
@@ -122,7 +122,7 @@ Results dashboard
 
 After Scan My PC, the app shows:
 
-  Scan Complete -- Recoverable Space Found
+  Scan Complete -- Potential Recovery
 
 After Run Safe Cleanup, the app shows:
 
@@ -151,8 +151,8 @@ License dashboard
 - Trial
   Scan and reports are enabled. Cleanup is locked until activation.
 
-- License Required
-  No active license was found. Purchase or import a license to clean and recover
+- Cleanup Activation Required
+  No active license was found. Activate Cleanup or import a license to recover
   space.
 
 Safety guardrails
@@ -188,7 +188,7 @@ Buttons
 - Import License
   Installs your BayouFinds license file.
 
-- Purchase License
+- Activate Cleanup
   Opens https://bayoufinds.com/b/y3OJr.
 
 - Scan My PC
