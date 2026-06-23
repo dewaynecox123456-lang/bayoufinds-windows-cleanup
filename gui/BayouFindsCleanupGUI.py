@@ -16,6 +16,74 @@ import traceback
 from datetime import datetime
 from math import ceil
 from pathlib import Path
+
+
+def resolve_startup_log_folder() -> Path:
+    user_profile = os.environ.get("USERPROFILE")
+    if user_profile:
+        return Path(user_profile) / "Desktop" / "BayouFinds_Cleanup_Logs"
+
+    desktop = Path.home() / "Desktop"
+    if desktop.exists():
+        return desktop / "BayouFinds_Cleanup_Logs"
+
+    return Path.home() / "BayouFinds_Cleanup_Logs"
+
+
+STARTUP_LOG_DIR = resolve_startup_log_folder()
+STARTUP_LOG_PATH = STARTUP_LOG_DIR / "gui_startup.log"
+ACTIVE_STARTUP_LOG_PATH: Path | None = None
+
+
+def append_bootstrap_startup_log(lines: list[str]) -> Path | None:
+    global ACTIVE_STARTUP_LOG_PATH
+
+    candidate_paths = [
+        STARTUP_LOG_PATH,
+        Path.cwd() / "BayouFinds_Cleanup_Logs" / "gui_startup.log",
+    ]
+
+    temp_dir = os.environ.get("TEMP")
+    if temp_dir:
+        candidate_paths.append(Path(temp_dir) / "BayouFinds_Cleanup_Logs" / "gui_startup.log")
+
+    candidate_paths.append(Path("/tmp") / "BayouFinds_Cleanup_Logs" / "gui_startup.log")
+
+    for log_path in candidate_paths:
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n".join(lines))
+                handle.write("\n")
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
+            ACTIVE_STARTUP_LOG_PATH = log_path
+            return log_path
+        except Exception:
+            continue
+
+    return None
+
+
+append_bootstrap_startup_log(
+    [
+        f"{datetime.now().isoformat(timespec='seconds')} - process started",
+        f"  Python Executable: {sys.executable}",
+        f"  Current Working Directory: {Path.cwd()}",
+        f"  Script Path: {Path(__file__).resolve()}",
+        f"  Log Path: {STARTUP_LOG_PATH}",
+    ]
+)
+append_bootstrap_startup_log(
+    [
+        f"{datetime.now().isoformat(timespec='seconds')} - log path resolved",
+        f"  Log Path: {STARTUP_LOG_PATH}",
+    ]
+)
+
 from tkinter import PhotoImage, Tk, Toplevel, filedialog, messagebox
 from tkinter import BOTH, END, LEFT, RIGHT, X, Y
 from tkinter import ttk
@@ -30,6 +98,14 @@ try:
 except ImportError:
     Image = None
     ImageTk = None
+
+append_bootstrap_startup_log(
+    [
+        f"{datetime.now().isoformat(timespec='seconds')} - imports completed",
+        f"  customtkinter available: {'Yes' if ctk is not None else 'No'}",
+        f"  Pillow available: {'Yes' if Image is not None and ImageTk is not None else 'No'}",
+    ]
+)
 
 
 APP_NAME = "BayouFinds Cleanup Assistant"
@@ -86,10 +162,7 @@ ADMIN_ONLY_ACTIONS = {
 
 
 def get_default_log_folder() -> Path:
-    desktop = Path.home() / "Desktop"
-    if not desktop.exists():
-        desktop = Path.home()
-    return desktop / "BayouFinds_Cleanup_Logs"
+    return STARTUP_LOG_DIR
 
 
 def is_process_elevated() -> str:
@@ -104,7 +177,7 @@ def is_process_elevated() -> str:
 
 def get_startup_log_dirs() -> list[Path]:
     candidate_dirs: list[Path] = [
-        get_default_log_folder(),
+        STARTUP_LOG_DIR,
         Path.cwd() / "BayouFinds_Cleanup_Logs",
     ]
 
@@ -117,6 +190,8 @@ def get_startup_log_dirs() -> list[Path]:
 
 
 def append_startup_log(filename: str, lines: list[str]) -> Path | None:
+    global ACTIVE_STARTUP_LOG_PATH
+
     for log_dir in get_startup_log_dirs():
         log_path = log_dir / filename
         try:
@@ -124,6 +199,13 @@ def append_startup_log(filename: str, lines: list[str]) -> Path | None:
             with log_path.open("a", encoding="utf-8") as handle:
                 handle.write("\n".join(lines))
                 handle.write("\n")
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
+            if filename == "gui_startup.log":
+                ACTIVE_STARTUP_LOG_PATH = log_path
             return log_path
         except Exception:
             continue
@@ -264,66 +346,32 @@ def force_main_window_visible(root: Tk) -> None:
         except Exception:
             pass
 
-    root.after(750, clear_topmost)
+    root.after(1000, clear_topmost)
 
 
-def show_splash_screen(root: Tk) -> None:
-    splash = None
-    try:
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TFrame", background=BG)
-        style.configure("Header.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 22, "bold"))
-        style.configure("Subheader.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 12))
-        style.configure("Muted.TLabel", background=BG, foreground=MUTED, font=("Segoe UI", 10))
-
-        splash = Toplevel(root)
-        write_startup_checkpoint("splash shown")
-        splash.overrideredirect(True)
-        splash.configure(bg=BG)
+def schedule_visibility_debug_fallback(root: Tk) -> None:
+    def confirm_visible() -> None:
         try:
-            splash.attributes("-topmost", True)
+            visible = bool(root.winfo_exists()) and bool(root.winfo_viewable()) and root.state() != "iconic"
+        except Exception:
+            visible = False
+
+        if visible:
+            write_startup_checkpoint("main window visibility confirmed")
+            return
+
+        write_startup_checkpoint("main window visibility not confirmed")
+        try:
+            messagebox.showinfo(
+                APP_NAME,
+                "BayouFinds Cleanup Assistant is running. If you cannot see the main window, "
+                "check the taskbar or press Alt+Tab.",
+                parent=root,
+            )
         except Exception:
             pass
-        center_window(splash, SPLASH_WIDTH, SPLASH_HEIGHT)
 
-        container = ttk.Frame(splash, padding=18)
-        container.pack(fill=BOTH, expand=True)
-
-        splash_path = find_asset_path("splash.png")
-        splash_image = fit_photo_image(
-            splash_path,
-            SPLASH_IMAGE_MAX_WIDTH,
-            SPLASH_IMAGE_MAX_HEIGHT,
-            allow_upscale=True,
-        ) if splash_path else None
-
-        if splash_image:
-            splash.image_cache = [splash_image]
-            ttk.Label(container, image=splash_image, background=BG).pack(expand=True, anchor="center")
-        else:
-            ttk.Label(container, text="BayouFinds", style="Header.TLabel").pack(pady=(70, 8))
-            ttk.Label(container, text="Windows Cleanup", style="Subheader.TLabel").pack()
-
-        ttk.Label(container, text=WINDOW_TITLE, style="Muted.TLabel").pack(pady=(14, 0))
-
-        def close_splash() -> None:
-            try:
-                if splash and splash.winfo_exists():
-                    splash.destroy()
-            except Exception:
-                pass
-
-        root.after(1400, close_splash)
-        root.wait_window(splash)
-        write_startup_checkpoint("splash closed")
-    except Exception:
-        try:
-            if splash and splash.winfo_exists():
-                splash.destroy()
-        except Exception:
-            pass
-        write_startup_checkpoint("splash closed")
+    root.after(2000, confirm_visible)
 
 
 class BayouFindsCleanupGUI:
@@ -2225,6 +2273,10 @@ def run_self_test() -> int:
     except Exception as exc:
         failures.append(f"could not create log directory {log_dir}: {exc}")
 
+    startup_log_path = write_startup_checkpoint("self-test startup log write check")
+    if startup_log_path is None or not startup_log_path.exists():
+        failures.append("could not write gui_startup.log")
+
     print(f"Python executable: {sys.executable}")
     print(f"Script path: {Path(__file__).resolve()}")
     print(f"Working directory: {Path.cwd()}")
@@ -2232,6 +2284,7 @@ def run_self_test() -> int:
     print(f"Running elevated: {is_process_elevated()}")
     print(f"Cleanup engine: {script_path}")
     print(f"Log directory: {log_dir}")
+    print(f"Startup log path: {startup_log_path or ACTIVE_STARTUP_LOG_PATH or STARTUP_LOG_PATH}")
 
     if failures:
         print("Self-test failed:")
@@ -2244,6 +2297,8 @@ def run_self_test() -> int:
 
 
 def main() -> None:
+    write_startup_checkpoint("entering main()")
+
     if "--self-test" in sys.argv:
         raise SystemExit(run_self_test())
 
@@ -2252,13 +2307,25 @@ def main() -> None:
 
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
+    write_startup_checkpoint("creating root")
     root = ctk.CTk()
-    root.withdraw()
-    show_splash_screen(root)
-    BayouFindsCleanupGUI(root)
-    write_startup_checkpoint("main window created")
+    write_startup_checkpoint("root created")
+    root.title(WINDOW_TITLE)
+    root.geometry(STARTUP_WINDOW_SIZE)
+    center_window(root, STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT)
     force_main_window_visible(root)
-    write_startup_checkpoint("main window made visible")
+    write_startup_checkpoint("taskbar visibility attempted")
+
+    write_startup_checkpoint("splash disabled")
+
+    write_startup_checkpoint("building app UI")
+    BayouFindsCleanupGUI(root)
+    write_startup_checkpoint("app UI built")
+    write_startup_checkpoint("making root visible")
+    force_main_window_visible(root)
+    write_startup_checkpoint("root visibility forced")
+    write_startup_checkpoint("taskbar visibility attempted")
+    schedule_visibility_debug_fallback(root)
     write_startup_checkpoint("entering mainloop")
     root.mainloop()
 
